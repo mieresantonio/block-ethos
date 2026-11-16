@@ -1,0 +1,67 @@
+// Import necessary components and functions from react-router-dom.
+
+import {
+  createBrowserRouter,
+  createRoutesFromElements,
+  Route
+} from "react-router-dom";
+import { Layout } from "./pages/Layout";
+import { Home } from "./pages/Home";
+//Aqui abajo se agrega lo nuevos componentes a importar
+import { Login } from "./components/Login";
+import { Register } from "./components/Register";
+import { Dashboard } from "./pages/Dashboard";
+import { Courses } from "./pages/Courses";
+import { Admin } from "./pages/Admin";
+import CoursePage from "./pages/CoursePage";
+import LessonPage from "./pages/LessonPage";
+import { QuizPage } from "./pages/QuizPage";
+import { Lab } from "./pages/Lab";
+import { Tutor } from "./pages/Tutor";
+import { CertificatePage } from "./pages/CertificatePage";
+import { VerifyPage } from "./pages/VerifyPage";
+import { VerifyEmail } from "./pages/VerifyEmail";
+import { ForgotPassword } from "./pages/ForgotPassword";
+import { ResetPassword } from "./pages/ResetPassword";
+import { NotFound } from "./pages/NotFound";
+
+export const router = createBrowserRouter(
+  createRoutesFromElements(
+    // CreateRoutesFromElements function allows you to build route elements declaratively.
+    // Create your routes here, if you want to keep the Navbar and Footer in all views, add your new routes inside the containing Route.
+    // Root, on the contrary, create a sister Route, if you have doubts, try it!
+    // Note: keep in mind that errorElement will be the default page when you don't get a route, customize that page to make your project more attractive.
+    // Note: The child paths of the Layout element replace the Outlet component with the elements contained in the "element" attribute of these child paths.
+
+    // Root Route: All navigation will start from here.
+    <Route path="/" element={<Layout />} errorElement={<NotFound />} >
+
+      {/* Nested Routes: Defines sub-routes within the BaseHome component. */}
+      <Route path="/" element={<Home />} />
+
+      <Route path="/login" element={
+        <div className="container mt-5 d-flex justify-content-center">
+          <Login />
+        </div>
+      } />
+      <Route path="/register" element={
+        <div className="container mt-5 d-flex justify-content-center">
+          <Register />
+        </div>
+      } />
+      <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/courses" element={<Courses />} />
+      <Route path="/laboratorio" element={<Lab />} />
+      <Route path="/tutor" element={<Tutor />} />
+      <Route path="/certificado/:pathId" element={<CertificatePage />} />
+      <Route path="/verificar/:code" element={<VerifyPage />} />
+      <Route path="/admin" element={<Admin />} />
+      <Route path="/course/:theId" element={<CoursePage />} />
+      <Route path="/lesson/:pathId/:lessonId" element={<LessonPage />} />
+      <Route path="/quizzes/:lessonId" element={<QuizPage />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+    </Route>
+  )
+);

@@ -1,0 +1,311 @@
+import { useState, useEffect } from "react";
+
+export const Admin = () => {
+    const [formAbierto, setFormAbierto] = useState(null);
+    const [tituloLeccion, setTituloLeccion] = useState("");
+    const [contenidoLeccion, setContenidoLeccion] = useState("");
+    const [rutas, setRutas] = useState([]);
+    const [modulos, setModulos] = useState([]);
+    const [listaDeUsuarios, setListaDeUsuarios] = useState([]);
+    const [moduloElegido, setModuloElegido] = useState("");
+    const [usuario, setUsuario] = useState(null);
+    const [formRutaAbierto, setFormRutaAbierto] = useState(false);
+    const [tituloRuta, setTituloRuta] = useState("");
+    const [formModuloAbierto, setFormModuloAbierto] = useState(null);
+    const [tituloModulo, setTituloModulo] = useState("");
+    const [nivelModulo, setNivelModulo] = useState("Principiante");
+
+    useEffect(() => {
+        let activo = true;
+        const userGuardado = localStorage.getItem("user");
+        if (userGuardado) {
+            setUsuario(JSON.parse(userGuardado));
+        }
+
+        const backendUrl = import.meta.env.VITE_BACKEND_URL;
+        fetch(backendUrl + "/api/learning-paths")
+            .then((res) => res.json())
+            .then((data) => { if (activo) setRutas(data); })
+            .catch(() => {});
+
+        fetch(backendUrl + "/api/modules")
+            .then((res) => res.json())
+            .then((data) => { if (activo) setModulos(data); })
+            .catch(() => {});
+
+        fetch(backendUrl + "/api/users", {
+            headers: { "Authorization": "Bearer " + localStorage.getItem("token") }
+        })
+            .then((res) => res.json())
+            .then((data) => { if (activo) setListaDeUsuarios(data); })
+            .catch(() => {});
+
+        return () => { activo = false; };
+    }, []);
+
+    const guardarLeccion = async (rutaId) => {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL;
+        try {
+            const res = await fetch(backendUrl + "/api/lessons", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + localStorage.getItem("token")
+                },
+                body: JSON.stringify({
+                    title: tituloLeccion,
+                    content: contenidoLeccion,
+                    module_id: Number(moduloElegido),
+                    order_number: (modulos.find(modulo => modulo.id === Number(moduloElegido)).lessons.at(-1)?.order_number ?? 0) + 1
+                })
+            });
+            const data = await res.json();
+
+            setTituloLeccion("");
+            setContenidoLeccion("");
+            setModuloElegido("");
+            setFormAbierto(null);
+        } catch (err) {
+        }
+    };
+
+    const guardarRuta = async () => {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL;
+        try {
+            const res = await fetch(backendUrl + "/api/learning-paths", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + localStorage.getItem("token")
+                },
+                body: JSON.stringify({ title: tituloRuta })
+            });
+            const data = await res.json();
+            setRutas([...rutas, data]);
+            setTituloRuta("");
+            setFormRutaAbierto(false);
+        } catch (err) {
+        }
+    };
+
+    const guardarModulo = async (rutaId) => {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL;
+        try {
+            const res = await fetch(backendUrl + "/api/modules", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + localStorage.getItem("token")
+                },
+                body: JSON.stringify({
+                    title: tituloModulo,
+                    level: nivelModulo,
+                    learning_path_id: rutaId
+                })
+            });
+            const data = await res.json();
+            setModulos([...modulos, data]);
+            setTituloModulo("");
+            setFormModuloAbierto(null);
+        } catch (err) {
+        }
+    };
+
+    if (!usuario || usuario.role !== "admin") {
+        return (
+            <div className="container py-5 d-flex justify-content-center">
+                <div className="card border-0 shadow-sm text-center" style={{ maxWidth: "420px", width: "100%" }}>
+                    <div className="card-body p-4 p-md-5">
+                        <span className="badge bg-danger-subtle text-danger-emphasis mb-3">
+                            Acceso restringido
+                        </span>
+                        <h3 className="fw-bold mb-2">Esta sección es solo para administradores</h3>
+                        <p className="text-muted small mb-0">
+                            Si crees que deberías tener acceso, contacta al equipo de Block Ethos.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="container py-4">
+            <div className="d-flex align-items-center gap-2 mb-1">
+                <h2 className="fw-bold mb-0">Panel de Administración</h2>
+                <span className="badge bg-primary rounded-pill">ADMIN</span>
+            </div>
+            <p className="text-secondary small">
+                Administra rutas, módulos y lecciones de la plataforma.
+            </p>
+
+            <div className="row g-3 mb-4">
+                <div className="col-6 col-lg-3">
+                    <div className="card border-0 shadow-sm p-3 border-start border-4 border-primary">
+                        <div className="text-secondary small text-uppercase">Rutas</div>
+                        <div className="fs-3 fw-bold">{rutas.length}</div>
+                    </div>
+                </div>
+                <div className="col-6 col-lg-3">
+                    <div className="card border-0 shadow-sm p-3 border-start border-4 border-info">
+                        <div className="text-secondary small text-uppercase">Módulos</div>
+                        <div className="fs-3 fw-bold">{modulos.length}</div>
+                    </div>
+                </div>
+                <div className="col-6 col-lg-3">
+                    <div className="card border-0 shadow-sm p-3 border-start border-4 border-success">
+                        <div className="text-secondary small text-uppercase">Lecciones</div>
+                        <div className="fs-3 fw-bold">{modulos.reduce((total, modulo) => total + modulo.lessons?.length, 0)}</div>
+                    </div>
+                </div>
+                <div className="col-6 col-lg-3">
+                    <div className="card border-0 shadow-sm p-3 border-start border-4 border-warning">
+                        <div className="text-secondary small text-uppercase">Usuarios</div>
+                        <div className="fs-3 fw-bold">{listaDeUsuarios.length}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="card border-0 shadow-sm">
+                <div className="card-header d-flex justify-content-between align-items-center">
+                    <h5 className="fw-bold mb-0">Rutas de aprendizaje</h5>
+                    <button
+                        className="btn btn-primary btn-sm rounded-pill px-3"
+                        onClick={() => setFormRutaAbierto(!formRutaAbierto)}
+                    >
+                        {formRutaAbierto ? "Cancelar" : "+ Nueva ruta"}
+                    </button>
+                </div>
+                <div className="card-body">
+                    {formRutaAbierto && (
+                        <div className="border rounded p-3 mb-3 lab-block">
+                            <label className="form-label small fw-bold" htmlFor="admin-titulo-ruta">Título de la ruta</label>
+                            <input
+                                type="text"
+                                id="admin-titulo-ruta"
+                                className="form-control form-control-sm mb-2"
+                                placeholder="Ej. Fundamentos de Blockchain"
+                                value={tituloRuta}
+                                onChange={(e) => setTituloRuta(e.target.value)}
+                            />
+                            <button
+                                className="btn btn-primary btn-sm rounded-pill px-3"
+                                onClick={guardarRuta}
+                                disabled={!tituloRuta}
+                            >
+                                Guardar ruta
+                            </button>
+                        </div>
+                    )}
+
+                    {rutas.sort((a, b) => a.id - b.id).map((ruta) => (
+                        <div className="border rounded p-3 mb-3" key={ruta.id}>
+                            <div className="d-flex justify-content-between align-items-center">
+                                <span className="fw-bold">{ruta.title}</span>
+                                <div className="d-flex gap-2">
+                                    <button
+                                        className="btn btn-sm btn-outline-secondary rounded-pill"
+                                        onClick={() => setFormModuloAbierto(formModuloAbierto === ruta.id ? null : ruta.id)}
+                                    >
+                                        {formModuloAbierto === ruta.id ? "Cancelar" : "+ Módulo"}
+                                    </button>
+                                    <button
+                                        className="btn btn-sm btn-outline-dark rounded-pill"
+                                        onClick={() => setFormAbierto(formAbierto === ruta.id ? null : ruta.id)}
+                                    >
+                                        {formAbierto === ruta.id ? "Cancelar" : "+ Lección"}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {formModuloAbierto === ruta.id && (
+                                <div className="border-top mt-3 pt-3">
+                                    <div className="mb-2">
+                                        <label className="form-label small fw-bold" htmlFor="admin-titulo-modulo">Título del módulo</label>
+                                        <input
+                                            type="text"
+                                            id="admin-titulo-modulo"
+                                            className="form-control form-control-sm"
+                                            placeholder="Ej. Módulo 1: Introducción"
+                                            value={tituloModulo}
+                                            onChange={(e) => setTituloModulo(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="mb-2">
+                                        <label className="form-label small fw-bold" htmlFor="admin-nivel-modulo">Nivel</label>
+                                        <select
+                                            id="admin-nivel-modulo"
+                                            className="form-select form-select-sm"
+                                            value={nivelModulo}
+                                            onChange={(e) => setNivelModulo(e.target.value)}
+                                        >
+                                            <option value="Principiante">Principiante</option>
+                                            <option value="Intermedio">Intermedio</option>
+                                            <option value="Avanzado">Avanzado</option>
+                                        </select>
+                                    </div>
+                                    <button
+                                        className="btn btn-primary btn-sm rounded-pill px-3"
+                                        onClick={() => guardarModulo(ruta.id)}
+                                        disabled={!tituloModulo}
+                                    >
+                                        Guardar módulo
+                                    </button>
+                                </div>
+                            )}
+
+                            {formAbierto === ruta.id && (
+                                <div className="border-top mt-3 pt-3">
+                                    <div className="mb-2">
+                                        <label className="form-label small fw-bold" htmlFor="admin-modulo-leccion">Módulo</label>
+                                        <select
+                                            id="admin-modulo-leccion"
+                                            className="form-select form-select-sm"
+                                            value={moduloElegido}
+                                            onChange={(e) => setModuloElegido(e.target.value)}
+                                        >
+                                            <option value="">Selecciona un módulo</option>
+                                            {ruta.modules.map((m) => (
+                                                <option key={m.id} value={m.id}>
+                                                    {m.title}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="mb-2">
+                                        <label className="form-label small fw-bold" htmlFor="admin-titulo-leccion">Título de la lección</label>
+                                        <input
+                                            id="admin-titulo-leccion"
+                                            type="text"
+                                            className="form-control form-control-sm"
+                                            placeholder="Ej. Qué es una llave privada"
+                                            value={tituloLeccion}
+                                            onChange={(e) => setTituloLeccion(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="mb-2">
+                                        <label className="form-label small fw-bold" htmlFor="admin-contenido-leccion">Contenido</label>
+                                        <textarea
+                                            id="admin-contenido-leccion"
+                                            className="form-control form-control-sm"
+                                            rows="4"
+                                            placeholder="Escribe el contenido de la lección..."
+                                            value={contenidoLeccion}
+                                            onChange={(e) => setContenidoLeccion(e.target.value)}
+                                        ></textarea>
+                                    </div>
+                                    <button
+                                        className="btn btn-primary btn-sm rounded-pill px-3"
+                                        onClick={() => guardarLeccion(ruta.id)}
+                                    >
+                                        Guardar lección
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
