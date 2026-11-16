@@ -6,8 +6,9 @@ import unicodedata
 from collections import Counter
 from datetime import timedelta, datetime, timezone
 
-from flask import request, jsonify, Blueprint, current_app
+from flask import request, jsonify, Blueprint, current_app, send_from_directory
 from flask_cors import CORS
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from flask_jwt_extended import (
     jwt_required,
@@ -19,6 +20,7 @@ from flask_mail import Message
 
 from api.models import db, User, UserType, LearningPath, Module, Lesson, Quiz, UserProgress, Certificate
 from api.mail import mail
+from api.rate_limit import rate_limit
 
 api = Blueprint('api', __name__)
 CORS(api)
@@ -43,6 +45,17 @@ def _es_score_valido(value):
         and not isinstance(value, bool)
         and 0 <= value <= 100
     )
+
+
+def _es_id_valido(value):
+    """Un id de clave foránea válido es un entero (bool no cuenta).
+
+    Sin esto, un dict como learning_path_id reventaba en
+    db.session.get() con InvalidRequestError (500 HTML), y True se
+    colaba como el id 1 (en Python, True == 1). Mismo criterio que
+    ya aplicaba POST /progress a lesson_id.
+    """
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _current_user_id():
@@ -80,6 +93,7 @@ def _require_admin():
 # ============================================================================
 
 @api.route('/signup', methods=['POST'])
+@rate_limit(max_attempts=5)
 def handle_signup():
     data = request.get_json(silent=True)
     # Un JSON válido pero no-objeto (p. ej. una lista) es truthy y hacía
@@ -129,14 +143,14 @@ def handle_signup():
 
     try:
         msg = Message(
-            subject="Verifica tu cuenta en ALI",
+            subject="Verifica tu cuenta en Block Ethos",
             recipients=[user.email],
             html=f"""
             <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;
                         padding:32px 24px;line-height:1.6;color:#212529">
               <h2 style="margin:0 0 20px 0">¡Hola{f', {username}' if username else ''}!</h2>
               <p style="margin:0 0 24px 0">
-                Gracias por registrarte en ALI. Confirma tu correo para activar tu cuenta:
+                Gracias por registrarte en Block Ethos. Confirma tu correo para activar tu cuenta:
               </p>
               <p style="margin:0 0 24px 0">
                 <a href="{verification_link}"
@@ -166,6 +180,7 @@ def handle_signup():
 
 
 @api.route('/login', methods=['POST'])
+@rate_limit(max_attempts=10)
 def handle_login():
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or not data:
@@ -221,6 +236,7 @@ def handle_verify_email():
 
 
 @api.route('/forgot-password', methods=['POST'])
+@rate_limit(max_attempts=5)
 def handle_forgot_password():
     data = request.get_json(silent=True)
     email = _texto(data, 'email').lower() if isinstance(data, dict) else ''
@@ -249,7 +265,7 @@ def handle_forgot_password():
 
     try:
         msg = Message(
-            subject="Recuperación de contraseña - ALI",
+            subject="Recuperación de contraseña - Block Ethos",
             recipients=[user.email],
             html=f"""
             <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;
@@ -283,6 +299,7 @@ def handle_forgot_password():
 
 
 @api.route('/reset-password', methods=['POST'])
+@rate_limit(max_attempts=5)
 def handle_reset_password():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
@@ -325,6 +342,20 @@ def handle_reset_password():
 # ============================================================================
 # RUTAS ORIGINALES DEL PROYECTO (sin cambios)
 # ============================================================================
+
+@api.route('/openapi.yaml', methods=['GET'])
+def get_openapi_spec():
+    """Sirve la especificación OpenAPI del repo (docs/openapi.yaml).
+
+    Se sirve el archivo tal cual, sin parsearlo: PyYAML no es una
+    dependencia declarada del backend y no hace falta para entregar el
+    documento. El test de contrato (tests/test_openapi.py) audita que
+    cada ruta /api/* registrada esté en la especificación y viceversa.
+    """
+    docs_dir = os.path.join(os.path.dirname(__file__), "..", "..", "docs")
+    return send_from_directory(
+        docs_dir, "openapi.yaml", mimetype="application/yaml")
+
 
 @api.route('/hello', methods=['POST', 'GET'])
 def handle_hello():
@@ -416,6 +447,20 @@ def create_learning_path():
     body = request.get_json(silent=True)
     if not isinstance(body, dict) or not _texto(body, "title"):
         return jsonify({"error": "Debes proporcionar un título válido"}), 400
+    if len(body["title"]) > 100:
+        return jsonify({"error": "El título es demasiado largo (máximo 100 caracteres)"}), 400
+    # Los campos opcionales deben ser cadenas o null: un dict o una lista
+    # llegaba al INSERT y reventaba con ProgrammingError (500 HTML). Las
+    # longitudes son las del modelo (String(300/50/50)): SQLite no las
+    # impone, pero Postgres sí, y allí un valor largo reventaba igual
+    # en el commit.
+    for campo, maximo in (("image_url", 300), ("description", None),
+                          ("time_required", 50), ("level", 50)):
+        valor = body.get(campo)
+        if valor is not None and not isinstance(valor, str):
+            return jsonify({"error": f"{campo} debe ser una cadena de texto"}), 400
+        if maximo is not None and isinstance(valor, str) and len(valor) > maximo:
+            return jsonify({"error": f"{campo} es demasiado largo (máximo {maximo} caracteres)"}), 400
     path = LearningPath(title=body["title"], image_url=body.get("image_url"), description=body.get(
         "description"), time_required=body.get("time_required"), level=body.get("level"))
     db.session.add(path)
@@ -462,8 +507,10 @@ def create_module():
     # no vacía), en la misma guarda y antes del 404 de la ruta padre.
     if not isinstance(body, dict) or not _texto(body, "title") \
             or not _texto(body, "level") \
-            or body.get("learning_path_id") is None:
+            or not _es_id_valido(body.get("learning_path_id")):
         return jsonify({"error": "Debes proporcionar título, level y learning_path_id"}), 400
+    if len(body["title"]) > 100 or len(body["level"]) > 50:
+        return jsonify({"error": "El título o el level son demasiado largos (máximo 100 y 50 caracteres)"}), 400
     if not db.session.get(LearningPath, body["learning_path_id"]):
         return jsonify({"error": "Learning path not found"}), 404
     module = Module(title=body["title"], level=body.get(
@@ -506,11 +553,17 @@ def create_lesson():
     # existiera: con "content": null pasaba la validación y el commit
     # reventaba igual que en create_module (500 HTML). Se exige que el
     # valor no sea None, como module_id en la misma guarda.
+    # Ronda 12: además debe ser una cadena: un dict o una lista pasaba
+    # el «no es None» y reventaba en el INSERT con ProgrammingError
+    # (500 HTML), y un entero se guardaba tal cual en la columna Text.
     if not isinstance(body, dict) or not _texto(body, "title") \
-            or body.get("content") is None or body.get("module_id") is None \
+            or not isinstance(body.get("content"), str) \
+            or not _es_id_valido(body.get("module_id")) \
             or not isinstance(body.get("order_number"), int) \
             or isinstance(body.get("order_number"), bool):
         return jsonify({"error": "Debes proporcionar título, contenido, module_id y order_number"}), 400
+    if len(body["title"]) > 200:
+        return jsonify({"error": "El título es demasiado largo (máximo 200 caracteres)"}), 400
     if not db.session.get(Module, body["module_id"]):
         return jsonify({"error": "Module not found"}), 404
     lesson = Lesson(
@@ -544,7 +597,7 @@ def create_quiz():
     if error:
         return error
     body = request.get_json(silent=True)
-    if not isinstance(body, dict) or body.get("lesson_id") is None \
+    if not isinstance(body, dict) or not _es_id_valido(body.get("lesson_id")) \
             or "questions_data" not in body:
         return jsonify({"error": "Debes proporcionar lesson_id y questions_data"}), 400
     if not db.session.get(Lesson, body["lesson_id"]):
@@ -627,6 +680,11 @@ def create_initial_progress():
     if any(not isinstance(item["lesson_id"], int)
            or isinstance(item["lesson_id"], bool) for item in body):
         return jsonify({"error": "lesson_id debe ser un entero"}), 400
+    # Igual que lesson_id: un user_id True se colaba como el id 1
+    # (True == 1) y uno no entero llegaba al INSERT.
+    if any(not isinstance(item["user_id"], int)
+           or isinstance(item["user_id"], bool) for item in body):
+        return jsonify({"error": "user_id debe ser un entero"}), 400
     lesson_ids = {item["lesson_id"] for item in body}
     known_lessons = {l.id for l in db.session.execute(
         db.select(Lesson).where(Lesson.id.in_(lesson_ids))).scalars().all()}
@@ -861,6 +919,11 @@ def claim_certificate():
     if not isinstance(body, dict):
         body = {}
     path_id = body.get("path_id")
+    # Un path_id no entero (dict, cadena, bool) reventaba en
+    # db.session.get() con InvalidRequestError (500 HTML), o se colaba
+    # como otro id (True == 1). Ausente sigue siendo 404, como antes.
+    if path_id is not None and not _es_id_valido(path_id):
+        return jsonify({"error": "path_id debe ser un entero"}), 400
     path = db.session.get(LearningPath, path_id) if path_id is not None else None
     if not path:
         return jsonify({"error": "Ruta no encontrada"}), 404
@@ -895,7 +958,20 @@ def claim_certificate():
         issued_at=issued,
     )
     db.session.add(cert)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Carrera con otra reclamación simultánea de la misma ruta: la
+        # restricción única uq_certificate_user_path rechazó el segundo
+        # certificado. Se devuelve el existente (200) en vez de un 500.
+        db.session.rollback()
+        existing = db.session.execute(
+            db.select(Certificate).filter_by(
+                user_id=user.id, learning_path_id=path.id)
+        ).scalars().one_or_none()
+        if existing:
+            return jsonify(existing.serialize()), 200
+        raise
     return jsonify(cert.serialize()), 201
 
 

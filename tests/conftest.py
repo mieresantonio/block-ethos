@@ -22,6 +22,11 @@ os.environ.pop("ENABLE_ADMIN", None)
 # admin demo solo se crea con SEED_DEMO_USERS=1, así que aquí se activa
 # explícitamente.
 os.environ["SEED_DEMO_USERS"] = "1"
+# El limitador de auth (api/rate_limit.py) está APAGADO para toda la
+# suite: decenas de logins salen de la misma IP de test y el límite de
+# 10/minuto los bloquearía. Los tests que lo prueban lo encienden en
+# caliente (app.config) en tests/test_rate_limit.py.
+os.environ["RATE_LIMIT_DISABLED"] = "1"
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { GraduationCap, Send, BookOpen, Sparkles } from "lucide-react";
+import { GraduationCap, Send, BookOpen, Sparkles, Trash2 } from "lucide-react";
 import { askTutor } from "../services/tutorService";
 
 // Tutor de Block Ethos: responde SOLO con fragmentos de las propias
@@ -25,16 +25,74 @@ const MENSAJE_INICIAL = {
     sources: []
 };
 
+// Memoria del tutor (2ª tanda, 16 nov 2026): la conversación sobrevive
+// al refresco y al cambio de página, guardada solo en este navegador
+// (localStorage, nada sale del dispositivo). Clave versionada para
+// poder cambiar el formato sin romper lecturas viejas; tope de 30
+// mensajes para no crecer sin límite.
+const TUTOR_STORAGE_KEY = "bk-tutor-v1";
+const TUTOR_MAX_MENSAJES = 30;
+
+const cargarHistorial = () => {
+    try {
+        const raw = localStorage.getItem(TUTOR_STORAGE_KEY);
+        if (!raw) return [MENSAJE_INICIAL];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed) || parsed.length === 0) return [MENSAJE_INICIAL];
+        const validos = parsed.filter(
+            (m) =>
+                m &&
+                (m.role === "user" || m.role === "tutor") &&
+                typeof m.text === "string" &&
+                m.text.length > 0
+        );
+        return validos.length > 0 ? validos.slice(-TUTOR_MAX_MENSAJES) : [MENSAJE_INICIAL];
+    } catch {
+        return [MENSAJE_INICIAL];
+    }
+};
+
 export const Tutor = () => {
-    const [messages, setMessages] = useState([MENSAJE_INICIAL]);
+    const [messages, setMessages] = useState(cargarHistorial);
     const [input, setInput] = useState("");
     const [sending, setSending] = useState(false);
     const [error, setError] = useState("");
     const endRef = useRef(null);
+    const primerRender = useRef(true);
 
+    // Guarda cada cambio de la conversación (con tope). El try/catch
+    // cubre el modo privado y la cuota llena: sin memoria, el tutor
+    // sigue funcionando igual en la sesión.
     useEffect(() => {
+        try {
+            localStorage.setItem(
+                TUTOR_STORAGE_KEY,
+                JSON.stringify(messages.slice(-TUTOR_MAX_MENSAJES))
+            );
+        } catch {
+            // Sin almacenamiento disponible: se pierde la memoria
+            // entre visitas, pero nada más.
+        }
+    }, [messages]);
+
+    // Al cargar, el único mensaje es el inicial: no desplazar, porque
+    // el scroll llevaba el título bajo el header fijo. Solo se baja
+    // al final cuando ya hay conversación (usuario + respuestas).
+    // Tampoco se desplaza en el primer render con historial
+    // restaurado: el salto inicial escondería el título igual.
+    useEffect(() => {
+        if (primerRender.current) {
+            primerRender.current = false;
+            return;
+        }
+        if (messages.length <= 1) return;
         endRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, sending]);
+
+    const limpiarConversacion = () => {
+        setMessages([MENSAJE_INICIAL]);
+        setError("");
+    };
 
     const send = async (text) => {
         const question = (text ?? input).trim();
@@ -76,6 +134,18 @@ export const Tutor = () => {
                     servicios externos ni inventa respuestas fuera del temario.
                 </p>
             </div>
+
+            {messages.length > 1 && (
+                <div className="d-flex justify-content-end mb-2">
+                    <button
+                        type="button"
+                        className="btn btn-outline-secondary btn-sm rounded-pill d-inline-flex align-items-center gap-1"
+                        onClick={limpiarConversacion}
+                    >
+                        <Trash2 size={14} /> Limpiar conversación
+                    </button>
+                </div>
+            )}
 
             <div
                 className="card border-0 shadow-sm mb-3"

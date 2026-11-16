@@ -3,12 +3,16 @@ import { useSearchParams, Link } from "react-router-dom";
 import { getCourses } from "../services/coursesService";
 import { CourseFilterBar } from "../components/CourseFilterBar";
 import { CourseCard } from "../components/CourseCard";
+import { PathSkeletonGrid } from "../components/PathCardSkeleton";
+import { LoadError, BACKEND_DORMIDO } from "../components/LoadError";
 import { User, FileText, CheckCircle2, ShieldCheck } from "lucide-react";
 
 export const Courses = () => {
     const [courses, setCourses] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    // Booleano, no el mensaje técnico: el visitante nunca ve el error
+    // crudo («Failed to fetch»); el detalle queda en la consola.
+    const [error, setError] = useState(false);
     const [searchParams] = useSearchParams();
     const [searchText, setSearchText] = useState(searchParams.get("q") || "");
     const [activeLevel, setActiveLevel] = useState("Todas las Rutas");
@@ -24,10 +28,17 @@ export const Courses = () => {
     const cargar = () => {
         const seq = ++cargarSeq.current;
         setLoading(true);
-        setError(null);
+        setError(false);
         getCourses()
             .then((data) => { if (seq === cargarSeq.current) setCourses(data); })
-            .catch((err) => { if (seq === cargarSeq.current) setError(err.message); })
+            .catch((err) => {
+                if (seq === cargarSeq.current) {
+                    // Detalle técnico solo en consola (ver LoadError).
+                    // eslint-disable-next-line no-console -- diagnóstico para quien desarrolla, no para el visitante
+                    console.error("No se pudieron cargar las rutas:", err);
+                    setError(true);
+                }
+            })
             .finally(() => { if (seq === cargarSeq.current) setLoading(false); });
     };
 
@@ -100,20 +111,17 @@ export const Courses = () => {
             />
 
             {loading && (
-                <div className="text-center py-4">
-                    <div className="spinner-border text-primary" role="status">
-                        <span className="visually-hidden">Cargando rutas de aprendizaje...</span>
-                    </div>
-                    <p className="text-muted small mt-2 mb-0">Cargando rutas de aprendizaje...</p>
-                </div>
+                <>
+                    <span className="visually-hidden" role="status">Cargando rutas de aprendizaje...</span>
+                    <PathSkeletonGrid count={6} />
+                </>
             )}
             {error && (
-                <div className="alert alert-danger" role="alert">
-                    <p className="mb-2">{error}</p>
-                    <button type="button" className="btn btn-outline-danger btn-sm rounded-pill px-3" onClick={cargar}>
-                        Reintentar
-                    </button>
-                </div>
+                <LoadError
+                    title={BACKEND_DORMIDO.title}
+                    message={BACKEND_DORMIDO.message}
+                    onRetry={cargar}
+                />
             )}
             {!loading && !error && filteredCourses.length === 0 && (
                 <div className="py-3">

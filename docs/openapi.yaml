@@ -1,0 +1,1518 @@
+openapi: 3.0.3
+info:
+  title: Block Ethos API
+  version: 1.0.0
+  description: 'API de Block Ethos (Web3 Space): autenticación, catálogo de rutas/módulos/lecciones,
+    progreso, gamificación, certificados y tutor. Cobertura de rutas completa y auditada
+    por tests (tests/test_openapi.py): cada ruta /api/* registrada está aquí y cada
+    ruta documentada existe, con cuerpos y respuestas detallados en los 26 endpoints.'
+servers:
+- url: /
+  description: Mismo origen que sirve la API
+paths:
+  /api/certificates/claim:
+    post:
+      summary: Reclamar el certificado de una ruta completada
+      description: >-
+        Exige todas las lecciones de la ruta completadas y cada quiz
+        aprobado con 70% o más. Si ya existe un certificado para esa
+        ruta, devuelve el existente con 200 en vez de duplicarlo.
+      tags: [Certificados]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path_id]
+              properties:
+                path_id:
+                  type: integer
+      responses:
+        '201':
+          description: Certificado emitido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '200':
+          description: El certificado ya existía; se devuelve el mismo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '400':
+          description: Ruta sin completar, quizzes sin aprobar o path_id inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '404':
+          description: El usuario o la ruta no existen.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/certificates/mine:
+    get:
+      summary: Listar los certificados del usuario autenticado
+      tags: [Certificados]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Certificados ordenados por fecha de emisión descendente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Certificate'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: El token no identifica a un usuario válido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/certificates/verify/{code}:
+    get:
+      summary: Verificar públicamente un certificado por su código
+      description: No requiere autenticación.
+      tags: [Certificados]
+      responses:
+        '200':
+          description: Certificado válido.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+                  code:
+                    type: string
+                  holder:
+                    type: string
+                  path:
+                    type: string
+                  issued_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+        '404':
+          description: No existe un certificado con ese código.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: false
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+  /api/dashboard:
+    get:
+      summary: Saludo del panel con el usuario autenticado
+      tags: [Usuarios]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Bienvenida con el usuario.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Bienvenido
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: El token no identifica a un usuario válido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: El usuario del token ya no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/forgot-password:
+    post:
+      summary: Solicitar el correo de recuperación de contraseña
+      description: >-
+        Responde siempre igual exista o no el correo (no revela si un
+        email está registrado). Limitado a 5 intentos/minuto por IP.
+      tags: [Autenticación]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: >-
+            Mensaje genérico de confirmación (se envía el correo solo
+            si el usuario existe).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Falta el correo electrónico.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Demasiados intentos desde esta IP.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Retry-After:
+              description: Segundos hasta poder reintentar.
+              schema:
+                type: integer
+  /api/gamification/me:
+    get:
+      summary: XP, nivel y rachas del usuario autenticado
+      description: >-
+        Todo se deriva del progreso guardado: 100 XP por lección
+        completada más la nota de cada quiz; la racha cuenta días
+        consecutivos con al menos una lección completada.
+      tags: [Gamificación]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Resumen de gamificación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Gamification'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: El token no identifica a un usuario válido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/hello:
+    get:
+      summary: Mensaje de prueba del backend (ruta original del proyecto)
+      responses:
+        '200':
+          description: Mensaje de saludo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+    post:
+      summary: Mensaje de prueba del backend (ruta original del proyecto)
+      responses:
+        '200':
+          description: Mensaje de saludo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+  /api/learning-paths:
+    get:
+      summary: Listar todas las rutas de aprendizaje con sus módulos
+      tags: [Catálogo]
+      responses:
+        '200':
+          description: Lista de rutas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LearningPathWithModules'
+    post:
+      summary: Crear una ruta de aprendizaje (solo administradores)
+      tags: [Catálogo]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  maxLength: 100
+                image_url:
+                  type: string
+                  maxLength: 300
+                description:
+                  type: string
+                time_required:
+                  type: string
+                  maxLength: 50
+                level:
+                  type: string
+                  maxLength: 50
+      responses:
+        '201':
+          description: Ruta creada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningPath'
+        '400':
+          description: Falta el título, un campo no es cadena o supera su máximo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: El usuario autenticado no es administrador.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/learning-paths/{path_id}:
+    get:
+      summary: Obtener una ruta de aprendizaje con sus módulos y lecciones
+      tags: [Catálogo]
+      responses:
+        '200':
+          description: Ruta encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LearningPathDetail'
+        '404':
+          description: No existe una ruta con ese id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: path_id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /api/lessons:
+    get:
+      summary: Listar todas las lecciones
+      tags: [Catálogo]
+      responses:
+        '200':
+          description: Lista de lecciones.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LessonSummary'
+    post:
+      summary: Crear una lección (solo administradores)
+      tags: [Catálogo]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, content, module_id, order_number]
+              properties:
+                title:
+                  type: string
+                  maxLength: 200
+                content:
+                  type: string
+                  description: Contenido Markdown de la lección.
+                module_id:
+                  type: integer
+                  description: Módulo padre; debe existir.
+                order_number:
+                  type: integer
+      responses:
+        '201':
+          description: Lección creada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  title:
+                    type: string
+        '400':
+          description: Faltan campos, tipos inválidos o título demasiado largo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: El usuario autenticado no es administrador.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: El módulo padre no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/lessons/{lesson_id}:
+    get:
+      summary: Obtener una lección con su contenido y las lecciones del módulo
+      tags: [Catálogo]
+      responses:
+        '200':
+          description: Lección encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonDetail'
+        '404':
+          description: No existe una lección con ese id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: lesson_id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /api/login:
+    post:
+      summary: Iniciar sesión y obtener un token JWT
+      description: >-
+        El token se usa como Authorization: Bearer en los endpoints
+        protegidos. La cuenta debe estar activa (correo verificado).
+        Limitado a 10 intentos/minuto por IP.
+      tags: [Autenticación]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login correcto.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, user]
+                properties:
+                  token:
+                    type: string
+                    description: Token JWT de acceso.
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Cuerpo de la petición inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Credenciales inválidas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: La cuenta existe pero el correo no está verificado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Demasiados intentos desde esta IP.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Retry-After:
+              description: Segundos hasta poder reintentar.
+              schema:
+                type: integer
+  /api/modules:
+    get:
+      summary: Listar todos los módulos con sus lecciones
+      tags: [Catálogo]
+      responses:
+        '200':
+          description: Lista de módulos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModuleWithLessons'
+    post:
+      summary: Crear un módulo (solo administradores)
+      tags: [Catálogo]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, level, learning_path_id]
+              properties:
+                title:
+                  type: string
+                  maxLength: 100
+                level:
+                  type: string
+                  maxLength: 50
+                  description: Nivel del módulo (p. ej. "Principiante").
+                learning_path_id:
+                  type: integer
+                  description: Ruta de aprendizaje padre; debe existir.
+      responses:
+        '201':
+          description: Módulo creado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  title:
+                    type: string
+                  lessons:
+                    type: array
+                    items: {}
+        '400':
+          description: Faltan título, level o learning_path_id, o son demasiado largos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: El usuario autenticado no es administrador.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: La ruta de aprendizaje padre no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/modules/{module_id}:
+    get:
+      summary: Obtener un módulo por id
+      tags: [Catálogo]
+      responses:
+        '200':
+          description: Módulo encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Module'
+        '404':
+          description: No existe un módulo con ese id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: module_id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /api/openapi.yaml:
+    get:
+      summary: Descargar esta especificación OpenAPI
+      description: Sirve el archivo docs/openapi.yaml tal cual.
+      responses:
+        '200':
+          description: La especificación en YAML.
+          content:
+            application/yaml:
+              schema:
+                type: string
+  /api/progress:
+    post:
+      summary: Crear el progreso inicial del usuario (lista de lecciones)
+      description: >-
+        Crea una fila por lección; las lecciones que ya tienen progreso
+        se saltan sin duplicar. Solo se puede crear progreso propio.
+      tags: [Progreso]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                required: [user_id, lesson_id]
+                properties:
+                  user_id:
+                    type: integer
+                    description: Debe ser el id del usuario autenticado.
+                  lesson_id:
+                    type: integer
+                    description: La lección debe existir.
+                  quiz_score:
+                    type: number
+                    minimum: 0
+                    maximum: 100
+                    nullable: true
+                  is_completed:
+                    type: boolean
+      responses:
+        '201':
+          description: Progreso creado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: >-
+            El cuerpo no es una lista, falta user_id/lesson_id, tipos
+            inválidos o quiz_score fuera de 0–100.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: Se intenta crear progreso de otro usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Alguna lección de la lista no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/progress/{user_id}:
+    get:
+      summary: Listar el progreso de un usuario (solo el propio)
+      tags: [Progreso]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Progreso por lección (lista vacía si no hay ninguno).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserProgress'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: Se pide el progreso de otro usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /api/progress/{user_id}/{lesson_id}:
+    get:
+      summary: Obtener el progreso de un usuario en una lección (solo el propio)
+      tags: [Progreso]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: >-
+            Progreso de la lección; si no existe fila, devuelve
+            is_completed=false y quiz_score=null con 200.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lesson_id:
+                    type: integer
+                  is_completed:
+                    type: boolean
+                  quiz_score:
+                    type: number
+                    nullable: true
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: Se pide el progreso de otro usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: lesson_id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      summary: Actualizar (o crear) el progreso en una lección (solo el propio)
+      description: >-
+        Si no existe fila y la lección existe, la crea. Al completar
+        una lección por primera vez se sella completed_at, que alimenta
+        las rachas de gamificación.
+      tags: [Progreso]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quiz_score:
+                  type: number
+                  minimum: 0
+                  maximum: 100
+                  nullable: true
+                is_completed:
+                  type: boolean
+                  nullable: true
+                  description: null significa «sin cambio».
+      responses:
+        '200':
+          description: Progreso actualizado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Cuerpo inválido o quiz_score fuera de 0–100.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: Se intenta modificar el progreso de otro usuario.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: La lección no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: lesson_id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /api/quizzes:
+    post:
+      summary: Crear el quiz de una lección (solo administradores)
+      tags: [Catálogo]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lesson_id, questions_data]
+              properties:
+                lesson_id:
+                  type: integer
+                  description: Lección del quiz; debe existir.
+                questions_data:
+                  description: Preguntas del quiz (JSON libre).
+      responses:
+        '201':
+          description: Quiz creado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+        '400':
+          description: Faltan lesson_id o questions_data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: El usuario autenticado no es administrador.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: La lección no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/quizzes/{lesson_id}:
+    get:
+      summary: Obtener el quiz de una lección
+      tags: [Catálogo]
+      responses:
+        '200':
+          description: Quiz encontrado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  questions:
+                    description: Preguntas del quiz (JSON libre).
+        '404':
+          description: Esa lección no tiene quiz.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: lesson_id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /api/reset-password:
+    post:
+      summary: Restablecer la contraseña con el token del correo
+      description: >-
+        El token es el ?token= del enlace de recuperación (válido 1
+        hora). Limitado a 5 intentos/minuto por IP.
+      tags: [Autenticación]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token:
+                  type: string
+                password:
+                  type: string
+                  minLength: 6
+      responses:
+        '200':
+          description: Contraseña restablecida.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Faltan datos, contraseña corta o token inválido/expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: El usuario del token ya no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Demasiados intentos desde esta IP.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Retry-After:
+              description: Segundos hasta poder reintentar.
+              schema:
+                type: integer
+  /api/signup:
+    post:
+      summary: Registrar un usuario nuevo
+      description: >-
+        Crea la cuenta inactiva y envía el correo de verificación
+        (enlace válido 24 h). Si el correo ya existe pero inactivo, se
+        actualiza el usuario y se reenvía la verificación. Limitado a
+        5 intentos/minuto por IP.
+      tags: [Autenticación]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                username:
+                  type: string
+                  maxLength: 80
+                email:
+                  type: string
+                  format: email
+                  maxLength: 120
+                password:
+                  type: string
+                  minLength: 6
+      responses:
+        '201':
+          description: Usuario registrado; revisar el correo para verificar la cuenta.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Datos inválidos o correo ya registrado y activo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Demasiados intentos desde esta IP.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          headers:
+            Retry-After:
+              description: Segundos hasta poder reintentar.
+              schema:
+                type: integer
+        '500':
+          description: El usuario se creó pero falló el envío del correo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  error:
+                    type: string
+  /api/tutor:
+    post:
+      summary: Preguntar al tutor (responde solo desde las lecciones)
+      description: >-
+        Búsqueda TF-IDF sobre el contenido de las lecciones, sin
+        servicios externos ni modelos de lenguaje. La respuesta es
+        extractiva y cita sus fuentes; si ninguna lección cubre la
+        pregunta, lo dice y sugiere la lección más cercana.
+      tags: [Tutor]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Respuesta del tutor, con o sin cobertura.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TutorAnswer'
+        '400':
+          description: Falta la pregunta o supera los 500 caracteres.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/users:
+    get:
+      summary: Listar todos los usuarios (solo administradores)
+      tags: [Usuarios]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de usuarios.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: El usuario autenticado no es administrador.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/users/{user_id}:
+    get:
+      summary: Obtener un usuario por id (el propio usuario o un administrador)
+      tags: [Usuarios]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Usuario encontrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: El usuario autenticado no es ese usuario ni administrador.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No existe un usuario con ese id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: integer
+  /api/verify-email:
+    post:
+      summary: Activar la cuenta con el token del correo de verificación
+      description: El token es el ?token= del enlace de verificación (válido 24 h).
+      tags: [Autenticación]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: Cuenta verificada (o ya estaba verificada).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Falta el token, tipo de token inválido o enlace expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: El usuario del token ya no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'Token JWT de /api/login en la cabecera Authorization: Bearer <token>.'
+  schemas:
+    Error:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+          description: Mensaje de error legible.
+    JwtError:
+      type: object
+      description: >-
+        Errores del propio flask-jwt-extended (token ausente, expirado
+        o mal formado). OJO: usan la clave "msg", no "error" como el
+        resto de la API; es el formato por defecto de la librería.
+      required: [msg]
+      properties:
+        msg:
+          type: string
+    User:
+      type: object
+      description: La serialización pública de un usuario (User.serialize).
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+        role:
+          type: string
+          enum: [student, admin]
+    Module:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        level:
+          type: string
+    ModuleWithLessons:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        level:
+          type: string
+        learning_path_id:
+          type: integer
+        lessons:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              title:
+                type: string
+              order_number:
+                type: integer
+    LearningPath:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        image_url:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        time_required:
+          type: string
+          nullable: true
+        level:
+          type: string
+          nullable: true
+    LearningPathWithModules:
+      allOf:
+        - $ref: '#/components/schemas/LearningPath'
+        - type: object
+          properties:
+            number_of_modules:
+              type: integer
+            modules:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  title:
+                    type: string
+    LearningPathDetail:
+      allOf:
+        - $ref: '#/components/schemas/LearningPath'
+        - type: object
+          properties:
+            number_of_modules:
+              type: integer
+            modules:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  title:
+                    type: string
+                  lessons:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        title:
+                          type: string
+    LessonSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        module_id:
+          type: integer
+        order_number:
+          type: integer
+    LessonDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        module_id:
+          type: integer
+        content:
+          type: string
+        order_number:
+          type: integer
+        module_lessons:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              order:
+                type: integer
+    UserProgress:
+      type: object
+      properties:
+        lesson_id:
+          type: integer
+        lesson_title:
+          type: string
+        path_id:
+          type: integer
+        is_completed:
+          type: boolean
+        quiz_score:
+          type: number
+          nullable: true
+    Gamification:
+      type: object
+      properties:
+        xp:
+          type: integer
+        level_name:
+          type: string
+        level_min_xp:
+          type: integer
+        next_level_name:
+          type: string
+          nullable: true
+        next_level_xp:
+          type: integer
+          nullable: true
+        xp_to_next:
+          type: integer
+        progress_to_next:
+          type: number
+        streak_current:
+          type: integer
+        streak_best:
+          type: integer
+        active_days:
+          type: integer
+        lessons_completed:
+          type: integer
+        quizzes_passed:
+          type: integer
+    Certificate:
+      type: object
+      description: La serialización pública de un certificado (Certificate.serialize).
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+          example: BK-ABCDE-12345-FGHIJ
+        path_id:
+          type: integer
+        path_title:
+          type: string
+          nullable: true
+        holder:
+          type: string
+          nullable: true
+        issued_at:
+          type: string
+          format: date-time
+          nullable: true
+    TutorSource:
+      type: object
+      properties:
+        lesson_id:
+          type: integer
+        lesson_title:
+          type: string
+        module_title:
+          type: string
+        path_id:
+          type: integer
+        path_title:
+          type: string
+        excerpt:
+          type: string
+        score:
+          type: number
+    TutorAnswer:
+      type: object
+      properties:
+        found:
+          type: boolean
+          description: false si ninguna lección cubre la pregunta.
+        answer:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/TutorSource'

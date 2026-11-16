@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import String, Boolean, ForeignKey, func, Text, JSON
+from sqlalchemy import String, Boolean, ForeignKey, func, Text, JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 from typing import Any, Dict
@@ -110,6 +110,16 @@ class UserProgress(db.Model):
 
 class Certificate(db.Model):
     __tablename__ = 'certificates'
+    # Un certificado por (usuario, ruta): antes la unicidad era solo
+    # lógica (el endpoint buscaba si existía y si no creaba), y dos
+    # reclamaciones simultáneas podían colar dos certificados con
+    # códigos distintos. La base de datos es la que garantiza ahora
+    # que eso no puede pasar; el endpoint captura la IntegrityError
+    # y devuelve el certificado existente.
+    __table_args__ = (
+        UniqueConstraint("user_id", "learning_path_id",
+                         name="uq_certificate_user_path"),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
     learning_path_id: Mapped[int] = mapped_column(

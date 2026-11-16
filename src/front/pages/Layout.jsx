@@ -8,11 +8,13 @@ export const Layout = () => {
     const location = useLocation();
     return (
         <ScrollToTop location={location}>
-            <Navbar />
-            <main>
-                <Outlet />
-            </main>
-            <Footer />
+            <div className="bk-layout">
+                <Navbar />
+                <main className="bk-main">
+                    <Outlet />
+                </main>
+                <Footer />
+            </div>
         </ScrollToTop>
     );
 }; 

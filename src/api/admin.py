@@ -19,7 +19,7 @@ def setup_admin(app):
             "Flask-Admin deshabilitado: actívalo con FLASK_DEBUG=1 o "
             "ENABLE_ADMIN=1 solo en local.")
         return
-    admin = Admin(app, name='4Geeks Admin',
+    admin = Admin(app, name='Block Ethos Admin',
                   theme=Bootstrap4Theme(swatch='cerulean'))
 
     # Dynamically add all models to the admin interface automatically

@@ -62,6 +62,11 @@ export const router = createBrowserRouter(
       <Route path="/quizzes/:lessonId" element={<QuizPage />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      {/* 404 dentro del Layout (navbar + footer): antes solo existía
+          como errorElement de la ruta raíz y se renderizaba sin
+          Layout. El errorElement se conserva para errores de
+          renderizado; las rutas desconocidas caen aquí. */}
+      <Route path="*" element={<NotFound />} />
     </Route>
   )
 );

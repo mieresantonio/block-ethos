@@ -131,6 +131,24 @@ a:hover {
   filter: brightness(1.07);
   color: #fff;
 }
+/* Un botón deshabilitado debe PARECER deshabilitado. Bootstrap solo
+   baja la opacidad a 0.65 y el gradiente de marca seguía viéndose
+   activo (p. ej. «Preguntar» en /tutor con el campo vacío): sin
+   gradiente, sin sombra y sin elevación al pasar el cursor. */
+.btn:disabled, .btn.disabled {
+  cursor: not-allowed;
+}
+.btn.btn-primary:disabled, .btn.btn-primary.disabled,
+.btn.btn-primary:disabled:hover, .btn.btn-primary.disabled:hover,
+.btn.btn-primary:disabled:focus, .btn.btn-primary.disabled:focus {
+  background: rgba(148, 163, 184, 0.16);
+  border: 1px solid var(--bk-line-2);
+  color: var(--bk-muted);
+  box-shadow: none;
+  filter: none;
+  transform: none;
+  opacity: 1;
+}
 .btn-outline-primary {
   border: 1.5px solid var(--bk-line-2);
   color: var(--bk-text);
@@ -168,10 +186,11 @@ a:hover {
 }
 
 /* ---------- Navbar ---------- */
+/* Fondo sólido (sin translucidez ni blur): con el header translúcido,
+   las tarjetas que pasaban por debajo se veían difuminadas a través
+   de él al hacer scroll. */
 .navbar {
-  background: rgba(7, 13, 26, 0.82) !important;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: var(--bk-bg) !important;
   border-bottom: 1px solid var(--bk-line);
   box-shadow: none !important;
 }
@@ -631,6 +650,19 @@ hr {
   .bk-cert { box-shadow: none; max-width: 100%; }
 }
 
+/* ---------- Armazón de página: footer anclado abajo ---------- */
+/* En páginas cortas (/tutor) el footer quedaba flotando con una franja
+   oscura vacía debajo en escritorio. La columna flex a 100vh empuja
+   el footer al pie del viewport cuando el contenido no llena. */
+.bk-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.bk-main {
+  flex: 1 0 auto;
+}
+
 /* ---------- Footer ---------- */
 footer.bk-footer {
   border-top: 1px solid var(--bk-line);
@@ -703,7 +735,7 @@ footer.bk-footer a:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ticker-track, .hero-blob { animation: none; }
+  .ticker-track, .hero-blob, .bk-skeleton { animation: none; }
   html { scroll-behavior: auto; }
 }
 
@@ -730,3 +762,25 @@ footer.bk-footer a:hover {
 }
 /* El ticker se detiene al pasar el cursor por encima */
 .ticker-track:hover { animation-play-state: paused; }
+
+/* ---------- Skeletons de carga (2ª tanda, 16 nov 2026) ---------- */
+/* Bloque de carga con brillo animado, solo con tokens del sistema.
+   El brillo es casi invisible (≤ 8 % de salto, diseno_vitrina):
+   panel-2 de base y --bk-text al 8 % como banda móvil. */
+.bk-skeleton {
+  background-color: var(--bk-panel-2);
+  background-image: linear-gradient(100deg, transparent 40%, rgba(233, 238, 251, 0.08) 50%, transparent 60%);
+  background-size: 200% 100%;
+  animation: bk-shimmer 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+/* La imagen del esqueleto mide 160 px como la de CourseCard /
+   LearningPathCard, sin radio (la tarjeta recorta con overflow). */
+.bk-skeleton-img {
+  height: 160px;
+  border-radius: 0;
+}
+@keyframes bk-shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
