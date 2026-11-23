@@ -8,6 +8,12 @@ Nació como proyecto final del bootcamp Full Stack de **4Geeks Academy (Grupo 3)
 
 **[BC123.pythonanywhere.com](https://BC123.pythonanywhere.com)** — Contenido actual: 2 rutas, 5 módulos, 9 lecciones con sus 9 quizzes, y el tutor integrado en [`/tutor`](https://BC123.pythonanywhere.com/tutor).
 
+## Caso de estudio
+
+Cómo se construyó Block Ethos, contado como caso: decisiones de arquitectura,
+errores reales encontrados y cómo se resolvieron, con enlaces al código y a
+los tests — [docs/CASO-ESTUDIO.md](docs/CASO-ESTUDIO.md).
+
 ## Qué ofrece
 
 - **Cuentas completas** — registro con verificación de correo, inicio de sesión con JWT, recuperación de contraseña y roles (estudiante / administrador).
@@ -133,3 +139,7 @@ La evolución posterior de Block Ethos se desarrolló con apoyo de herramientas 
 ## Créditos
 
 Proyecto final de 4Geeks Academy — Grupo 3 (ALI). Construido sobre la plantilla oficial react-flask de 4Geeks, muy modificada. Repositorio original (proyecto final grupal): [mieresantonio-ProyectoFinal-grupo3-ALI](https://github.com/mieresantonio/mieresantonio-ProyectoFinal-grupo3-ALI).
+
+## Licencia
+
+Este proyecto se distribuye bajo la [licencia MIT](LICENSE).

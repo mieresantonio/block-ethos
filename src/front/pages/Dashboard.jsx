@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import useGlobalReducer from "../hooks/useGlobalReducer";
 import { ArrowRight, FileText, Flame, Award } from "lucide-react";
 import { getGamification, getMyCertificates } from "../services/gamificationService";
+import { getMyProfile, updateMyProfile } from "../services/profileService";
 
 export const Dashboard = () => {
     const { store, dispatch } = useGlobalReducer();
@@ -13,6 +14,11 @@ export const Dashboard = () => {
     const [usuario, setUsuario] = useState(null);
     const [gami, setGami] = useState(null);
     const [certs, setCerts] = useState([]);
+    const [perfil, setPerfil] = useState(null);
+    const [handleInput, setHandleInput] = useState("");
+    const [perfilMsg, setPerfilMsg] = useState("");
+    const [guardandoPerfil, setGuardandoPerfil] = useState(false);
+    const [enlaceCopiado, setEnlaceCopiado] = useState(false);
 
     useEffect(() => {
         let activo = true;
@@ -54,6 +60,9 @@ export const Dashboard = () => {
                 // simplemente no muestra esas secciones.
                 getGamification(store.token).then((g) => { if (activo) setGami(g); }).catch(() => {});
                 getMyCertificates(store.token).then((c) => { if (activo) setCerts(c); }).catch(() => {});
+                getMyProfile(store.token).then((p) => {
+                    if (activo) { setPerfil(p); setHandleInput(p.handle || ""); }
+                }).catch(() => {});
             } catch (err) {
                 if (activo) setError(err.message);
             } finally {
@@ -98,6 +107,57 @@ export const Dashboard = () => {
     // Primera lección sin completar: la que usamos para "Continuar aprendiendo".
     const siguienteLeccion = progress.find((p) => !p.is_completed);
 
+    // Perfil público: guardar el handle, publicar/ocultar y copiar el
+    // enlace. Los errores del backend (handle en uso, formato) se
+    // muestran tal cual debajo del formulario.
+    const guardarHandle = async () => {
+        setPerfilMsg("");
+        setGuardandoPerfil(true);
+        try {
+            const p = await updateMyProfile(store.token, { handle: handleInput });
+            setPerfil(p);
+            setPerfilMsg("Handle guardado.");
+        } catch (e) {
+            setPerfilMsg(e.message);
+        } finally {
+            setGuardandoPerfil(false);
+        }
+    };
+
+    const cambiarVisibilidad = async () => {
+        if (!perfil?.handle) {
+            setPerfilMsg("Elige primero un handle para tu perfil público.");
+            return;
+        }
+        setPerfilMsg("");
+        setGuardandoPerfil(true);
+        try {
+            const p = await updateMyProfile(store.token, { is_public: !perfil.is_public });
+            setPerfil(p);
+            setPerfilMsg(p.is_public ? "Tu perfil público está activo." : "Tu perfil público está oculto.");
+        } catch (e) {
+            setPerfilMsg(e.message);
+        } finally {
+            setGuardandoPerfil(false);
+        }
+    };
+
+    const copiarEnlacePerfil = async () => {
+        const url = `${window.location.origin}/u/${perfil.handle}`;
+        try {
+            await navigator.clipboard.writeText(url);
+        } catch {
+            const area = document.createElement("textarea");
+            area.value = url;
+            document.body.appendChild(area);
+            area.select();
+            document.execCommand("copy");
+            document.body.removeChild(area);
+        }
+        setEnlaceCopiado(true);
+        setTimeout(() => setEnlaceCopiado(false), 2000);
+    };
+
     if (!usuario || usuario.role !== "student") {
         return (
             <div className="container py-5 text-center">
@@ -111,13 +171,16 @@ export const Dashboard = () => {
 
     return (
         <div className="container py-4">
-            <span className="badge bg-primary-subtle text-primary-emphasis mb-2" data-aos="fade-up">
+            {/* Sin data-aos en la cabecera: está sobre el pliegue y debe
+                verse a plena opacidad desde el primer instante; con AOS
+                se veía tenue un momento al cargar (igual que el hero). */}
+            <span className="badge bg-primary-subtle text-primary-emphasis mb-2">
                 Panel del Estudiante
             </span>
-            <h2 className="fw-bold mb-1" data-aos="fade-up">
+            <h2 className="fw-bold mb-1">
                 Bienvenido{store.user?.username ? `, ${store.user.username}` : ""}
             </h2>
-            <p className="text-muted mb-4" data-aos="fade-up">
+            <p className="text-muted mb-4">
                 Sigue avanzando en tu ruta de aprendizaje blockchain.
             </p>
 
@@ -182,6 +245,75 @@ export const Dashboard = () => {
                                 </Link>
                             </div>
                         ))}
+                    </div>
+                </div>
+            )}
+
+            {perfil && (
+                <div className="card border-0 shadow-sm mb-4">
+                    <div className="card-body p-4">
+                        <h5 className="fw-bold mb-2">Tu perfil público</h5>
+                        <p className="text-secondary small mb-3">
+                            Una página pública con tu progreso verificado para
+                            enlazarla desde tu CV y LinkedIn. Solo se ve lo
+                            que elijas publicar: nada se hace público hasta
+                            que lo activas aquí.
+                        </p>
+                        <div className="d-flex gap-2 flex-wrap align-items-center mb-2">
+                            <div className="input-group" style={{ maxWidth: "320px" }}>
+                                <span className="input-group-text">/u/</span>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    placeholder="tu-handle"
+                                    aria-label="Handle de tu perfil público"
+                                    value={handleInput}
+                                    onChange={(e) => setHandleInput(e.target.value)}
+                                    maxLength={30}
+                                    disabled={guardandoPerfil}
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                className="btn btn-outline-primary rounded-pill px-3"
+                                onClick={guardarHandle}
+                                disabled={guardandoPerfil || !handleInput.trim()}
+                            >
+                                Guardar handle
+                            </button>
+                            <button
+                                type="button"
+                                className={`btn rounded-pill px-3 ${perfil.is_public ? "btn-outline-secondary" : "btn-primary"}`}
+                                onClick={cambiarVisibilidad}
+                                disabled={guardandoPerfil}
+                            >
+                                {perfil.is_public ? "Ocultar perfil" : "Publicar perfil"}
+                            </button>
+                        </div>
+                        {perfilMsg && (
+                            <p className="small mb-2" role="status">{perfilMsg}</p>
+                        )}
+                        {perfil.is_public && perfil.handle && (
+                            <p className="small mb-0">
+                                Tu perfil:{" "}
+                                <Link to={`/u/${perfil.handle}`}>
+                                    {window.location.origin}/u/{perfil.handle}
+                                </Link>{" "}
+                                <button
+                                    type="button"
+                                    className="btn btn-link btn-sm p-0"
+                                    onClick={copiarEnlacePerfil}
+                                >
+                                    {enlaceCopiado ? "¡Copiado!" : "Copiar enlace"}
+                                </button>
+                            </p>
+                        )}
+                        <p className="text-secondary small mb-0 mt-2">
+                            El handle debe tener 3–30 caracteres (minúsculas,
+                            dígitos y puntos, guiones o guiones bajos). Si lo
+                            cambias después de publicar, los enlaces antiguos
+                            dejarán de funcionar.
+                        </p>
                     </div>
                 </div>
             )}

@@ -1,15 +1,32 @@
 import { useState, useEffect } from "react";
-import { getPrices } from "../services/pricesService.js";
+import { getPrices, getCachedPrices } from "../services/pricesService.js";
+
+// Ticker de precios: en vivo desde CoinGecko, con el último precio
+// conocido en caché si la carga falla (se indica su antigüedad).
+// Sin precios vivos ni caché, no se muestra nada: mejor ausente
+// que inventado.
 
 export const PriceTicker = () => {
     const [precios, setPrecios] = useState([]);
+    const [cacheMinutos, setCacheMinutos] = useState(null);
 
     useEffect(() => {
         let activo = true;
         const cargar = () => {
             getPrices()
-                .then((data) => { if (activo) setPrecios(data); })
-                .catch(() => {});
+                .then((data) => {
+                    if (!activo) return;
+                    setPrecios(data);
+                    setCacheMinutos(null);
+                })
+                .catch(() => {
+                    if (!activo) return;
+                    const cache = getCachedPrices();
+                    if (cache) {
+                        setPrecios(cache.prices);
+                        setCacheMinutos(Math.max(1, Math.round((Date.now() - cache.savedAt) / 60000)));
+                    }
+                });
         };
 
         cargar();
@@ -37,6 +54,11 @@ export const PriceTicker = () => {
                     </div>
                 ))}
             </div>
+            {cacheMinutos !== null && (
+                <p className="text-center text-secondary mb-0 mt-1" style={{ fontSize: "0.72rem" }}>
+                    Precios en caché · actualizados hace {cacheMinutos} min
+                </p>
+            )}
         </div>
     );
 };

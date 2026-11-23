@@ -127,6 +127,40 @@ def test_limite_por_endpoint_y_por_ip(client, rate_limit_on):
     assert r.status_code == 401, r.get_json()
 
 
+def _bad_login_como(client, ip):
+    """Login fallido «desde» una IP de cliente detrás del proxy."""
+    return client.post("/api/login", json={
+        "email": "nadie@example.test", "password": "incorrecta"},
+        headers={"X-Forwarded-For": ip})
+
+
+def test_proxyfix_limite_por_cliente_detras_del_proxy(client, rate_limit_on):
+    """H-001: detrás del proxy, cada cliente tiene su propio cubo.
+    10 logins fallidos con X-Forwarded-For 203.0.113.1 → el 11º es 429,
+    pero otra IP (203.0.113.2) sigue recibiendo 401: sin ProxyFix, la
+    IP del proxy sería una sola y el 429 bloquearía a todo el mundo."""
+    for _ in range(LOGIN_LIMIT):
+        r = _bad_login_como(client, "203.0.113.1")
+        assert r.status_code == 401, r.get_json()
+    _assert_429(_bad_login_como(client, "203.0.113.1"))
+    r = _bad_login_como(client, "203.0.113.2")
+    assert r.status_code == 401, r.get_json()
+
+
+def test_proxyfix_solo_confia_en_el_ultimo_salto(client, rate_limit_on):
+    """Con x_for=1 solo vale la última entrada de X-Forwarded-For (la
+    que añade el proxy). Agotado el cubo de 203.0.113.1, una cabecera
+    «198.51.100.7, 203.0.113.1» (entrada falsificada primero) sigue
+    dando 429, y «203.0.113.1, 198.51.100.7» da 401: el cliente no
+    puede esquivar el límite escribiendo la cabecera."""
+    for _ in range(LOGIN_LIMIT):
+        assert _bad_login_como(client, "203.0.113.1").status_code == 401
+    _assert_429(_bad_login_como(client, "203.0.113.1"))
+    _assert_429(_bad_login_como(client, "198.51.100.7, 203.0.113.1"))
+    r = _bad_login_como(client, "203.0.113.1, 198.51.100.7")
+    assert r.status_code == 401, r.get_json()
+
+
 def test_limitador_apagado_no_bloquea(client):
     """Con RATE_LIMIT_DISABLED (estado de la suite), 12 logins fallidos
     seguidos son todos 401: nunca aparece el 429."""

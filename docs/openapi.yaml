@@ -667,6 +667,148 @@ paths:
             application/yaml:
               schema:
                 type: string
+  /api/profile/me:
+    get:
+      summary: Configuración del propio perfil público
+      description: >-
+        Devuelve el handle y la visibilidad del perfil público del
+        usuario autenticado. No expone nada de otros usuarios.
+      tags: [Perfil público]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Configuración del perfil propio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileMe'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '404':
+          description: El token no identifica a un usuario válido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Configurar el propio perfil público
+      description: >-
+        Cambia el handle y/o la visibilidad del perfil público.
+        Solo estudiantes: el admin responde 403. Publicar exige
+        tener un handle elegido; un handle en uso responde 409.
+        Cambiar el handle deja el enlace viejo en 404.
+      tags: [Perfil público]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                handle:
+                  type: string
+                  minLength: 3
+                  maxLength: 30
+                  description: >-
+                    3-30 caracteres, minúsculas, dígitos y puntos,
+                    guiones o guiones bajos (nunca al principio ni al
+                    final); sin palabras reservadas (me, admin, api…).
+                is_public:
+                  type: boolean
+      responses:
+        '200':
+          description: Configuración guardada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileMe'
+        '400':
+          description: Cuerpo inválido, handle con formato incorrecto o publicar sin handle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Falta el token JWT (cabecera Authorization) o ha expirado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '422':
+          description: El token JWT está mal formado o su firma no es válida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JwtError'
+        '403':
+          description: El perfil público es solo para estudiantes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: El token no identifica a un usuario válido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: El handle ya está en uso por otro estudiante.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/profile/{handle}:
+    get:
+      summary: Perfil público verificable de un estudiante
+      description: >-
+        Página de credencial pública (/u/<handle>): nombre, nivel,
+        XP y rutas con su avance y sus certificados. Solo muestra lo
+        que el estudiante eligió hacer público; sin correo, sin id
+        interno, sin notas de quiz ni rachas. El mismo 404 para
+        «no existe», «no es público» y «no es estudiante».
+        Limitado a 30 peticiones por minuto e IP (exige P-02,
+        ProxyFix, para que el límite sea por cliente real).
+      tags: [Perfil público]
+      parameters:
+        - name: handle
+          in: path
+          required: true
+          schema:
+            type: string
+          example: antonio-mieres
+      responses:
+        '200':
+          description: Perfil público.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProfile'
+        '404':
+          description: No hay ningún perfil público con ese handle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Demasiadas peticiones desde esta IP; reintentar más tarde.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/progress:
     post:
       summary: Crear el progreso inicial del usuario (lista de lecciones)
@@ -1121,7 +1263,16 @@ paths:
         servicios externos ni modelos de lenguaje. La respuesta es
         extractiva y cita sus fuentes; si ninguna lección cubre la
         pregunta, lo dice y sugiere la lección más cercana.
+        La autenticación es OPCIONAL: con un JWT válido de estudiante,
+        la respuesta incluye next_step (siguiente lección, avance y
+        quizzes pendientes) y las preguntas sobre el propio progreso
+        («¿qué me falta?») se responden desde el progreso guardado;
+        sin token, o con uno caducado o inválido, el tutor responde
+        igual que siempre, sin personalizar.
       tags: [Tutor]
+      security:
+        - bearerAuth: []
+        - {}
       requestBody:
         required: true
         content:
@@ -1504,6 +1655,8 @@ components:
           type: string
         score:
           type: number
+          nullable: true
+          description: null en las fuentes de respuesta de progreso (no hay puntuación TF-IDF).
     TutorAnswer:
       type: object
       properties:
@@ -1516,3 +1669,113 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TutorSource'
+        next_step:
+          description: Siguiente paso del estudiante; null sin sesión o sin progreso que guiar.
+          allOf:
+            - $ref: '#/components/schemas/NextStep'
+          nullable: true
+        progress_answer:
+          type: boolean
+          description: true si la respuesta se construyó desde el progreso (pregunta «¿qué me falta?»).
+    NextStep:
+      type: object
+      properties:
+        all_done:
+          type: boolean
+        next_lesson:
+          allOf:
+            - $ref: '#/components/schemas/NextLesson'
+          nullable: true
+        lessons_total:
+          type: integer
+        lessons_completed:
+          type: integer
+        quizzes_pending:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuizPending'
+    NextLesson:
+      type: object
+      properties:
+        path_id:
+          type: integer
+        path_title:
+          type: string
+        module_title:
+          type: string
+        lesson_id:
+          type: integer
+        lesson_title:
+          type: string
+    QuizPending:
+      type: object
+      properties:
+        lesson_id:
+          type: integer
+        lesson_title:
+          type: string
+        path_id:
+          type: integer
+        path_title:
+          type: string
+    PublicProfile:
+      type: object
+      description: Lo único que sale por la API pública de un perfil.
+      properties:
+        handle:
+          type: string
+        display_name:
+          type: string
+        level_name:
+          type: string
+        xp:
+          type: integer
+        member_since:
+          type: string
+          nullable: true
+          description: Mes de ingreso, formato YYYY-MM.
+          example: "2026-11"
+        paths:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProfilePath'
+        certificates_count:
+          type: integer
+    ProfilePath:
+      type: object
+      properties:
+        path_id:
+          type: integer
+        title:
+          type: string
+        lessons_total:
+          type: integer
+        lessons_completed:
+          type: integer
+        percent:
+          type: integer
+        certificate:
+          allOf:
+            - $ref: '#/components/schemas/ProfileCertificate'
+          nullable: true
+    ProfileCertificate:
+      type: object
+      properties:
+        code:
+          type: string
+          example: BK-ABCDE-12345-FGHIJ
+        issued_at:
+          type: string
+          format: date-time
+          nullable: true
+    ProfileMe:
+      type: object
+      properties:
+        handle:
+          type: string
+          nullable: true
+        is_public:
+          type: boolean
+        username:
+          type: string
+          nullable: true

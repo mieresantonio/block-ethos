@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://BC123.pythonanywhere.com/sitemap.xml

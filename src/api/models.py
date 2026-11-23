@@ -19,6 +19,18 @@ class User(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     username: Mapped[str] = mapped_column(String(80), nullable=True)
+    # Handle del perfil público (/u/<handle>): único y elegido por el
+    # estudiante. Es una columna aparte del username a propósito: el
+    # registro nunca impuso unicidad de username (puede haber
+    # duplicados y espacios), así que convertirlo en identificador
+    # público exigiría una migración con el mismo riesgo de aborto
+    # por duplicados que la de certificados (195659629ab0).
+    public_handle: Mapped[str] = mapped_column(
+        String(30), unique=True, nullable=True, index=True)
+    # Opt-in del perfil público: False por defecto; nada de un
+    # estudiante se ve desde fuera hasta que él lo activa.
+    is_profile_public: Mapped[bool] = mapped_column(
+        Boolean(), default=False, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(default=func.now())

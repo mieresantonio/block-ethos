@@ -6,6 +6,7 @@ from flask import Flask, jsonify, send_from_directory, request, abort
 from flask_cors import CORS
 from flask_migrate import Migrate
 from werkzeug.exceptions import InternalServerError
+from werkzeug.middleware.proxy_fix import ProxyFix
 from api.utils import APIException, generate_sitemap
 from api.models import db
 from api.routes import api
@@ -21,6 +22,15 @@ static_file_dir = os.path.join(os.path.dirname(
     os.path.realpath(__file__)), '../dist/')
 
 app = Flask(__name__)
+# H-001: PythonAnywhere pone un proxy delante de la app. Sin ProxyFix,
+# request.remote_addr es la IP del proxy y el rate limiting de auth
+# (10 logins/min) se comparte entre TODOS los usuarios: diez logins
+# de cualquiera bloquean el login de todo el mundo. Con un solo proxy
+# de confianza (x_for=1), remote_addr pasa a ser la IP del cliente
+# que el proxy añade al final de X-Forwarded-For; lo que un cliente
+# escriba antes en esa cabecera se ignora. Sin cabecera (desarrollo
+# local, tests), remote_addr queda tal cual.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 app.config["JWT_SECRET_KEY"] = os.getenv(
     "FLASK_APP_KEY", "super-secret-fallback")
 # Rate limiting de auth (ver api/rate_limit.py): ventana en segundos y

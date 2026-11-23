@@ -9,8 +9,13 @@ export const Layout = () => {
     return (
         <ScrollToTop location={location}>
             <div className="bk-layout">
+                {/* Enlace de salto: quien navega con teclado llega al
+                    contenido sin pasar por toda la barra de navegación. */}
+                <a href="#contenido" className="bk-skip-link">
+                    Saltar al contenido principal
+                </a>
                 <Navbar />
-                <main className="bk-main">
+                <main id="contenido" className="bk-main" tabIndex="-1">
                     <Outlet />
                 </main>
                 <Footer />

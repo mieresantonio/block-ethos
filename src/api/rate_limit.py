@@ -19,8 +19,11 @@ tocando app.config sin reiniciar la app.
 Límites conocidos: el estado vive en memoria del proceso. En
 PythonAnywhere (un solo proceso) funciona tal cual; con varios
 procesos o réplicas cada uno limitaría por separado. La IP es
-request.remote_addr: no se confía en X-Forwarded-For, que un cliente
-puede falsificar si no hay un proxy de confianza delante.
+request.remote_addr, que app.py resuelve con ProxyFix (x_for=1)
+desde el único proxy de confianza: detrás de PythonAnywhere es la
+IP real de cada cliente, no la del proxy. Un cliente no puede
+falsificarla escribiendo en X-Forwarded-For: ProxyFix solo toma la
+última entrada, la que añade el proxy.
 """
 import threading
 import time

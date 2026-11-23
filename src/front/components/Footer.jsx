@@ -48,6 +48,18 @@ export const Footer = () => {
 							Proyecto final del bootcamp Full Stack de 4Geeks Academy.
 							Construido con React, Flask y PostgreSQL.
 						</p>
+						<p className="text-white-50 small mb-0 mt-2">
+							Código abierto bajo{" "}
+							<a
+								href="https://github.com/mieresantonio/block-ethos/blob/main/LICENSE"
+								className="text-white-50 text-decoration-underline"
+								target="_blank"
+								rel="noreferrer"
+							>
+								licencia MIT
+							</a>
+							.
+						</p>
 					</div>
 				</div>
 

@@ -15,7 +15,9 @@ from flask_jwt_extended import (
     get_jwt_identity,
     create_access_token,
     decode_token,
+    verify_jwt_in_request,
 )
+from flask_jwt_extended.exceptions import JWTExtendedException
 from flask_mail import Message
 
 from api.models import db, User, UserType, LearningPath, Module, Lesson, Quiz, UserProgress, Certificate
@@ -56,6 +58,24 @@ def _es_id_valido(value):
     ya aplicaba POST /progress a lesson_id.
     """
     return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _usuario_opcional_del_token():
+    """Usuario del JWT si viene un token válido; None en caso contrario.
+
+    Para endpoints públicos que se personalizan con sesión (el tutor):
+    sin token, con un token caducado o con uno inválido, se responde
+    como anónimo en vez de devolver 401/422. Un token viejo guardado
+    en el navegador no debe romper nunca una página pública.
+    """
+    try:
+        verify_jwt_in_request(optional=True)
+    except JWTExtendedException:
+        return None
+    user_id = _current_user_id()
+    if user_id is None:
+        return None
+    return db.session.get(User, user_id)
 
 
 def _current_user_id():
@@ -1009,6 +1029,158 @@ def verify_certificate(code):
 
 
 # ============================================================================
+# PERFIL PÚBLICO VERIFICABLE — /u/<handle>
+# ============================================================================
+# Opt-in por estudiante: solo lo que el usuario elige hacer público se
+# ve desde fuera, y solo lo que la plataforma puede verificar (rutas
+# completadas con su certificado, comprobable en /verificar/<código>).
+# Nada de correo, ids internos, notas de quiz ni rachas: el perfil es
+# una credencial, no un informe de actividad.
+
+_HANDLE_RE = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{1,28}[a-z0-9])?$")
+_HANDLE_RESERVADOS = {
+    "me", "admin", "api", "tutor", "login", "register", "dashboard",
+    "courses", "certificado", "verificar", "laboratorio", "lesson",
+    "course", "quizzes", "u", "root", "blockethos", "support",
+    "ayuda", "perfil", "profile", "settings", "ajustes",
+}
+
+
+def _handle_valido(handle):
+    """Handle de perfil: 3-30 caracteres, minúsculas, dígitos y . _ -
+    dentro (nunca al principio ni al final); nada de reservados."""
+    if not isinstance(handle, str):
+        return False
+    handle = handle.strip().lower()
+    if len(handle) < 3 or len(handle) > 30:
+        return False
+    if handle in _HANDLE_RESERVADOS:
+        return False
+    return bool(_HANDLE_RE.match(handle))
+
+
+def _perfil_publico_serialize(user):
+    """Lo único que sale por la API pública de un perfil: nombre para
+    mostrar, nivel y XP, rutas con su avance y sus certificados.
+    Sin correo, sin id interno, sin notas de quiz, sin rachas."""
+    paths = db.session.execute(
+        db.select(LearningPath)
+        .options(selectinload(LearningPath.modules)
+                 .selectinload(Module.lessons))
+        .order_by(LearningPath.id)).scalars().all()
+    certs = {c.learning_path_id: c for c in db.session.execute(
+        db.select(Certificate).filter_by(user_id=user.id)).scalars().all()}
+    rows = db.session.execute(
+        db.select(UserProgress).filter_by(user_id=user.id)).scalars().all()
+    xp = _calcular_xp(rows)
+    (_minimo, nombre_nivel), _siguiente = _nivel_desde_xp(xp)
+    rutas = []
+    for path in paths:
+        total, completadas, _pend = _resumen_ruta(user.id, path)
+        if total == 0:
+            continue
+        cert = certs.get(path.id)
+        rutas.append({
+            "path_id": path.id,
+            "title": path.title,
+            "lessons_total": total,
+            "lessons_completed": completadas,
+            "percent": round(completadas / total * 100) if total else 0,
+            "certificate": (
+                {"code": cert.code,
+                 "issued_at": cert.issued_at.isoformat()
+                 if cert.issued_at else None}
+                if cert else None),
+        })
+    return {
+        "handle": user.public_handle,
+        "display_name": user.username or user.public_handle,
+        "level_name": nombre_nivel,
+        "xp": xp,
+        "member_since": user.created_at.strftime("%Y-%m")
+        if user.created_at else None,
+        "paths": rutas,
+        "certificates_count": len(certs),
+    }
+
+
+@api.route('/profile/me', methods=['GET'])
+@jwt_required()
+def get_my_profile():
+    uid = _current_user_id()
+    user = db.session.get(User, uid) if uid is not None else None
+    if not user:
+        return jsonify({"error": "Usuario no encontrado"}), 404
+    return jsonify({
+        "handle": user.public_handle,
+        "is_public": bool(user.is_profile_public),
+        "username": user.username,
+    }), 200
+
+
+@api.route('/profile/me', methods=['PUT'])
+@jwt_required()
+def update_my_profile():
+    uid = _current_user_id()
+    user = db.session.get(User, uid) if uid is not None else None
+    if not user:
+        return jsonify({"error": "Usuario no encontrado"}), 404
+    # El perfil público es una credencial de estudiante: el admin no
+    # tiene progreso que mostrar (y la demo ADMIN nunca está activa).
+    if user.role != UserType.student:
+        return jsonify({
+            "error": "El perfil público es solo para estudiantes"}), 403
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "Cuerpo de la petición inválido"}), 400
+    if "handle" in body and body["handle"] is not None:
+        handle = body["handle"].strip().lower() \
+            if isinstance(body["handle"], str) else ""
+        if not _handle_valido(handle):
+            return jsonify({"error": (
+                "El handle debe tener 3-30 caracteres, solo minúsculas, "
+                "dígitos y puntos, guiones o guiones bajos, y no puede ser "
+                "una palabra reservada")}), 400
+        otro = db.session.execute(
+            db.select(User).filter_by(public_handle=handle)
+            .where(User.id != user.id)).scalars().one_or_none()
+        if otro:
+            return jsonify({"error": "Ese handle ya está en uso"}), 409
+        user.public_handle = handle
+    if "is_public" in body:
+        if not isinstance(body["is_public"], bool):
+            return jsonify({"error": "is_public debe ser true o false"}), 400
+        if body["is_public"] and not user.public_handle:
+            return jsonify({"error": (
+                "Elige primero un handle para tu perfil público")}), 400
+        user.is_profile_public = body["is_public"]
+    db.session.commit()
+    return jsonify({
+        "handle": user.public_handle,
+        "is_public": bool(user.is_profile_public),
+        "username": user.username,
+    }), 200
+
+
+@api.route('/profile/<string:handle>', methods=['GET'])
+@rate_limit(max_attempts=30)
+def get_public_profile(handle):
+    # El mismo 404 para «no existe», «no es público» y «no es
+    # estudiante»: la respuesta no debe decir cuál de las tres es,
+    # para no convertir el endpoint en un oráculo de usuarios.
+    # El rate limit es por IP de cliente: exige P-02 (ProxyFix)
+    # aplicado; sin él, detrás del proxy todos comparten un cubo.
+    user = db.session.execute(
+        db.select(User).filter_by(
+            public_handle=handle.strip().lower())
+    ).scalars().one_or_none()
+    if not user or not user.is_profile_public \
+            or user.role != UserType.student:
+        return jsonify({"error": "Perfil no encontrado"}), 404
+    return jsonify(_perfil_publico_serialize(user)), 200
+
+
+# ============================================================================
 # TUTOR DE BLOCK ETHOS — responde SOLO desde el contenido de las lecciones
 # ============================================================================
 # Sin servicios externos, sin claves y sin modelos de lenguaje: la
@@ -1202,6 +1374,127 @@ def _tutor_fuente(doc):
     }
 
 
+# Preguntas sobre el propio progreso («¿qué me falta?», «¿qué sigue?»):
+# no se responden desde los fragmentos de las lecciones sino desde el
+# progreso guardado del estudiante. La detección es por expresiones
+# normalizadas (sin acentos, en minúsculas); una pregunta temática
+# normal («¿qué es la mempool?») no casa con ninguna.
+_TUTOR_INTENCION_PROGRESO = (
+    "que me falta",
+    "cuanto me falta",
+    "que me queda",
+    "que sigue",
+    "que sigo",
+    "mi progreso",
+    "mi avance",
+    "donde voy",
+    "donde estoy",
+    "que estudiar",
+    "por donde sigo",
+    "por donde continuar",
+    "terminar mi ruta",
+    "terminar la ruta",
+    "completar mi ruta",
+)
+
+
+def _tutor_es_pregunta_progreso(pregunta):
+    normalizada = unicodedata.normalize(
+        "NFD", (pregunta or "").lower())
+    normalizada = "".join(
+        c for c in normalizada if unicodedata.category(c) != "Mn")
+    normalizada = re.sub(r"\s+", " ", normalizada).strip()
+    return any(expresion in normalizada
+               for expresion in _TUTOR_INTENCION_PROGRESO)
+
+
+def _tutor_siguiente_paso(user_id):
+    """Siguiente paso del estudiante, derivado de su progreso guardado.
+
+    Recorre las rutas en orden de id (módulos por id, lecciones por
+    order_number) y devuelve la primera lección sin completar, más
+    los quizzes pendientes (lecciones con quiz sin aprobar con 70).
+    Si no queda nada pendiente, all_done es True. No crea filas de
+    progreso: una lección sin fila cuenta como no empezada.
+    """
+    paths = db.session.execute(
+        db.select(LearningPath)
+        .options(selectinload(LearningPath.modules)
+                 .selectinload(Module.lessons)
+                 .selectinload(Lesson.quiz))
+        .order_by(LearningPath.id)).scalars().all()
+    rows = {p.lesson_id: p for p in db.session.execute(
+        db.select(UserProgress).filter_by(user_id=user_id)).scalars().all()}
+    quizzes_pendientes = []
+    total = 0
+    completadas = 0
+    siguiente = None
+    for path in paths:
+        for modulo in sorted(path.modules, key=lambda m: m.id):
+            for leccion in sorted(modulo.lessons,
+                                  key=lambda l: l.order_number):
+                total += 1
+                fila = rows.get(leccion.id)
+                if fila and fila.is_completed:
+                    completadas += 1
+                    if leccion.quiz is not None and (
+                            fila.quiz_score is None
+                            or fila.quiz_score < 70):
+                        quizzes_pendientes.append({
+                            "lesson_id": leccion.id,
+                            "lesson_title": leccion.title,
+                            "path_id": path.id,
+                            "path_title": path.title,
+                        })
+                elif siguiente is None:
+                    siguiente = {
+                        "path_id": path.id,
+                        "path_title": path.title,
+                        "module_title": modulo.title,
+                        "lesson_id": leccion.id,
+                        "lesson_title": leccion.title,
+                    }
+    return {
+        "all_done": siguiente is None,
+        "next_lesson": siguiente,
+        "lessons_total": total,
+        "lessons_completed": completadas,
+        "quizzes_pending": quizzes_pendientes,
+    }
+
+
+def _tutor_respuesta_progreso(paso):
+    """Texto de la respuesta a «¿qué me falta?», solo con datos propios
+    del estudiante. Plantilla determinista, sin fragmentos ni inventos."""
+    if paso["all_done"]:
+        texto = (
+            "Ya completaste todas las lecciones de tus rutas "
+            f"({paso['lessons_completed']} de {paso['lessons_total']})."
+        )
+        if paso["quizzes_pending"]:
+            titulos = ", ".join(
+                f"«{q['lesson_title']}»" for q in paso["quizzes_pending"])
+            texto += (
+                " Te falta aprobar con 70% o más el quiz de "
+                f"{titulos} para poder reclamar el certificado."
+            )
+        else:
+            texto += (" Si aún no lo hiciste, puedes reclamar tu "
+                      "certificado desde el panel.")
+        return texto
+    siguiente = paso["next_lesson"]
+    texto = (
+        f"Llevas {paso['lessons_completed']} de {paso['lessons_total']} "
+        f"lecciones. Tu siguiente paso es «{siguiente['lesson_title']}» "
+        f"({siguiente['path_title']} · {siguiente['module_title']})."
+    )
+    if paso["quizzes_pending"]:
+        titulos = ", ".join(
+            f"«{q['lesson_title']}»" for q in paso["quizzes_pending"])
+        texto += f" Además tienes pendiente aprobar el quiz de {titulos}."
+    return texto
+
+
 @api.route('/tutor', methods=['POST'])
 def tutor_pregunta():
     body = request.get_json(silent=True)
@@ -1215,6 +1508,49 @@ def tutor_pregunta():
     if len(pregunta) > 500:
         return jsonify({"error": "La pregunta es demasiado larga"}), 400
 
+    # Progreso opcional: con sesión de estudiante, el tutor conoce
+    # dónde va y guía el siguiente paso; sin sesión (o con un token
+    # caducado), responde igual que siempre, sin personalizar. El
+    # admin cae en la vía anónima: no tiene progreso que guiar.
+    usuario = _usuario_opcional_del_token()
+    paso = None
+    if usuario is not None and usuario.role == UserType.student:
+        paso = _tutor_siguiente_paso(usuario.id)
+
+    es_progreso = _tutor_es_pregunta_progreso(pregunta)
+    if es_progreso and usuario is None:
+        return jsonify({
+            "found": False,
+            "answer": (
+                "Para decirte qué te falta necesito ver tu progreso: "
+                "inicia sesión y pregúntame de nuevo."
+            ),
+            "sources": [],
+            "next_step": None,
+            "progress_answer": False,
+        }), 200
+    if es_progreso and paso is not None:
+        respuesta = _tutor_respuesta_progreso(paso)
+        fuentes = []
+        if paso["next_lesson"]:
+            siguiente = paso["next_lesson"]
+            fuentes.append({
+                "lesson_id": siguiente["lesson_id"],
+                "lesson_title": siguiente["lesson_title"],
+                "module_title": siguiente["module_title"],
+                "path_id": siguiente["path_id"],
+                "path_title": siguiente["path_title"],
+                "excerpt": "",
+                "score": None,
+            })
+        return jsonify({
+            "found": True,
+            "answer": respuesta,
+            "sources": fuentes,
+            "next_step": paso,
+            "progress_answer": True,
+        }), 200
+
     tokens = _tutor_tokens(pregunta)
     docs, idf = _tutor_indice()
     if not docs:
@@ -1222,6 +1558,8 @@ def tutor_pregunta():
             "found": False,
             "answer": "Todavía no hay lecciones cargadas en la plataforma.",
             "sources": [],
+            "next_step": paso,
+            "progress_answer": False,
         }), 200
 
     for doc in docs:
@@ -1243,6 +1581,8 @@ def tutor_pregunta():
                 "puede ser un buen punto de partida."
             ),
             "sources": [sugerencia],
+            "next_step": paso,
+            "progress_answer": False,
         }), 200
 
     # Hasta 3 fragmentos, de lecciones distintas si es posible, que
@@ -1263,4 +1603,6 @@ def tutor_pregunta():
         "found": True,
         "answer": respuesta,
         "sources": [_tutor_fuente(d) for d in elegidos],
+        "next_step": paso,
+        "progress_answer": False,
     }), 200

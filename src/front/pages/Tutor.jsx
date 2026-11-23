@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { GraduationCap, Send, BookOpen, Sparkles, Trash2 } from "lucide-react";
+import { GraduationCap, Send, BookOpen, Sparkles, Trash2, Copy, Check, ArrowRight } from "lucide-react";
 import { askTutor } from "../services/tutorService";
+import useGlobalReducer from "../hooks/useGlobalReducer";
 
 // Tutor de Block Ethos: responde SOLO con fragmentos de las propias
 // lecciones de la plataforma (búsqueda local en el backend, sin IA
@@ -57,6 +58,13 @@ export const Tutor = () => {
     const [input, setInput] = useState("");
     const [sending, setSending] = useState(false);
     const [error, setError] = useState("");
+    // Índice del mensaje cuya confirmación «Copiado» está visible.
+    const [copiado, setCopiado] = useState(null);
+    // Siguiente paso que trae cada respuesta del tutor con sesión
+    // (null sin sesión). Vive solo en memoria: al recargar, la
+    // tarjeta reaparece con la siguiente pregunta.
+    const [siguientePaso, setSiguientePaso] = useState(null);
+    const { store } = useGlobalReducer();
     const endRef = useRef(null);
     const primerRender = useRef(true);
 
@@ -94,6 +102,25 @@ export const Tutor = () => {
         setError("");
     };
 
+    // Copia una respuesta del tutor al portapapeles. La Clipboard API
+    // moderna falla sin HTTPS o sin permiso: el fallback con un área
+    // de texto temporal cubre esos casos. La confirmación «Copiado»
+    // dura 2 s y solo se borra si sigue siendo la última copia.
+    const copiarRespuesta = async (texto, i) => {
+        try {
+            await navigator.clipboard.writeText(texto);
+        } catch {
+            const area = document.createElement("textarea");
+            area.value = texto;
+            document.body.appendChild(area);
+            area.select();
+            document.execCommand("copy");
+            document.body.removeChild(area);
+        }
+        setCopiado(i);
+        setTimeout(() => setCopiado((actual) => (actual === i ? null : actual)), 2000);
+    };
+
     const send = async (text) => {
         const question = (text ?? input).trim();
         if (!question || sending) return;
@@ -102,7 +129,8 @@ export const Tutor = () => {
         setMessages((prev) => [...prev, { role: "user", text: question }]);
         setSending(true);
         try {
-            const data = await askTutor(question);
+            const data = await askTutor(question, store.token);
+            setSiguientePaso(data.next_step || null);
             setMessages((prev) => [
                 ...prev,
                 { role: "tutor", text: data.answer, sources: data.sources || [] }
@@ -134,6 +162,49 @@ export const Tutor = () => {
                     servicios externos ni inventa respuestas fuera del temario.
                 </p>
             </div>
+
+            {siguientePaso && !siguientePaso.all_done && siguientePaso.next_lesson && (
+                <div className="card border-0 shadow-sm mb-3 text-white" style={{ background: "var(--bk-grad)" }}>
+                    <div className="card-body p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <span className="badge mb-1" style={{ background: "#fff", color: "#4c1d95" }}>Tu siguiente paso</span>
+                            <p className="fw-bold mb-0 text-white">{siguientePaso.next_lesson.lesson_title}</p>
+                            <small className="text-white-50">
+                                {siguientePaso.next_lesson.path_title} · {siguientePaso.next_lesson.module_title} · {siguientePaso.lessons_completed} de {siguientePaso.lessons_total} lecciones
+                            </small>
+                            {siguientePaso.quizzes_pending.length > 0 && (
+                                <small className="d-block text-white-50">
+                                    Quiz pendiente: {siguientePaso.quizzes_pending.map((q) => q.lesson_title).join(", ")}
+                                </small>
+                            )}
+                        </div>
+                        <Link
+                            to={`/lesson/${siguientePaso.next_lesson.path_id}/${siguientePaso.next_lesson.lesson_id}`}
+                            className="btn rounded-pill px-3 fw-semibold d-inline-flex align-items-center gap-2"
+                            style={{ background: "#fff", color: "#4c1d95" }}
+                        >
+                            Continuar <ArrowRight size={16} />
+                        </Link>
+                    </div>
+                </div>
+            )}
+            {siguientePaso && siguientePaso.all_done && (
+                <div className="card border-0 shadow-sm mb-3" style={{ background: "var(--bk-grad)" }}>
+                    <div className="card-body p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <span className="badge mb-1" style={{ background: "#fff", color: "#4c1d95" }}>Ruta completada</span>
+                            <p className="fw-bold mb-0 text-white">Terminaste todas las lecciones. ¡A por el certificado!</p>
+                        </div>
+                        <Link
+                            to="/dashboard"
+                            className="btn rounded-pill px-3 fw-semibold d-inline-flex align-items-center gap-2"
+                            style={{ background: "#fff", color: "#4c1d95" }}
+                        >
+                            Ir al panel <ArrowRight size={16} />
+                        </Link>
+                    </div>
+                </div>
+            )}
 
             {messages.length > 1 && (
                 <div className="d-flex justify-content-end mb-2">
@@ -189,10 +260,23 @@ export const Tutor = () => {
                                     ))}
                                 </div>
                             )}
+                            {msg.role === "tutor" && msg.text !== MENSAJE_INICIAL.text && (
+                                <button
+                                    type="button"
+                                    className="btn btn-link btn-sm text-secondary p-0 mt-1 d-inline-flex align-items-center gap-1"
+                                    onClick={() => copiarRespuesta(msg.text, i)}
+                                >
+                                    {copiado === i ? (
+                                        <><Check size={13} /> Copiado</>
+                                    ) : (
+                                        <><Copy size={13} /> Copiar</>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     ))}
                     {sending && (
-                        <p className="text-secondary small mb-0">
+                        <p className="text-secondary small mb-0" role="status">
                             Buscando en las lecciones…
                         </p>
                     )}
@@ -218,6 +302,16 @@ export const Tutor = () => {
                         {s}
                     </button>
                 ))}
+                {store.token && (
+                    <button
+                        type="button"
+                        className="btn btn-outline-success btn-sm rounded-pill"
+                        onClick={() => send("¿Qué me falta para terminar mi ruta?")}
+                        disabled={sending}
+                    >
+                        ¿Qué me falta para terminar mi ruta?
+                    </button>
+                )}
             </div>
 
             <form onSubmit={handleSubmit} className="d-flex gap-2">
