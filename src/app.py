@@ -22,7 +22,7 @@ static_file_dir = os.path.join(os.path.dirname(
     os.path.realpath(__file__)), '../dist/')
 
 app = Flask(__name__)
-# H-001: PythonAnywhere pone un proxy delante de la app. Sin ProxyFix,
+# H-001-proxy: PythonAnywhere pone un proxy delante de la app. Sin ProxyFix,
 # request.remote_addr es la IP del proxy y el rate limiting de auth
 # (10 logins/min) se comparte entre TODOS los usuarios: diez logins
 # de cualquiera bloquean el login de todo el mundo. Con un solo proxy

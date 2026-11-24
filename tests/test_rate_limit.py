@@ -135,7 +135,7 @@ def _bad_login_como(client, ip):
 
 
 def test_proxyfix_limite_por_cliente_detras_del_proxy(client, rate_limit_on):
-    """H-001: detrás del proxy, cada cliente tiene su propio cubo.
+    """H-001-proxy: detrás del proxy, cada cliente tiene su propio cubo.
     10 logins fallidos con X-Forwarded-For 203.0.113.1 → el 11º es 429,
     pero otra IP (203.0.113.2) sigue recibiendo 401: sin ProxyFix, la
     IP del proxy sería una sola y el 429 bloquearía a todo el mundo."""
