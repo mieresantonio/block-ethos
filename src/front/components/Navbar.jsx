@@ -64,7 +64,7 @@ export const Navbar = () => {
 
 	return (
 		<nav className="navbar sticky-top py-3" aria-label="Navegación principal">
-			<div className="container d-flex flex-wrap align-items-center justify-content-between">
+			<div className="container d-flex flex-wrap align-items-center justify-content-between" style={{ rowGap: "1rem" }}>
 				<Link to="/" aria-label="Block Ethos — inicio">
 					<Logo size={32} />
 				</Link>
@@ -76,7 +76,7 @@ export const Navbar = () => {
 					<input
 						type="text"
 						className="form-control rounded-pill"
-						style={{ maxWidth: "400px" }}
+						style={{ maxWidth: "320px" }}
 						placeholder="¿Qué quieres aprender hoy?"
 						aria-label="Buscar rutas de aprendizaje"
 						value={searchText}
@@ -88,7 +88,7 @@ export const Navbar = () => {
 					{suggestionsOpen && suggestions.length > 0 && (
 						<ul
 							className="list-group position-absolute shadow-sm"
-							style={{ top: "100%", width: "min(400px, calc(100vw - 2rem))", zIndex: 1000 }}
+							style={{ top: "100%", width: "min(320px, calc(100vw - 2rem))", zIndex: 1000 }}
 						>
 							{suggestions.map((item, i) => (
 								<li key={i} className="list-group-item p-0">
@@ -141,7 +141,7 @@ export const Navbar = () => {
 				{/* En móvil y tablet, los mismos enlaces en una fila
 				    desplazable debajo del buscador: sin ellos, la barra
 				    desbordaba la pantalla. */}
-				<div className="d-flex d-lg-none gap-2 w-100 mt-2 overflow-auto flex-nowrap">
+				<div className="d-flex d-lg-none gap-2 w-100 mt-3 overflow-auto flex-nowrap">
 					<Link to="/courses" className="btn btn-outline-primary btn-sm rounded-pill flex-shrink-0">
 						Explorar Rutas
 					</Link>
