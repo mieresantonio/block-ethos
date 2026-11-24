@@ -132,7 +132,7 @@ Block Ethos nació como el proyecto final grupal del Grupo 3 sobre la plantilla 
 - **Gamificación y certificados verificables**: XP, niveles, rachas y certificados con código único y verificación pública.
 - **Despliegue y mantenimiento**: puesta en producción en PythonAnywhere y evolución continua.
 
-Soy el autor con más commits del repositorio original (48 de 93).
+Soy el autor con más commits del repositorio original.
 
 La evolución posterior de Block Ethos se desarrolló con apoyo de herramientas de IA como par de programación, bajo mi dirección y revisión: cada cambio de arquitectura, seguridad y despliegue fue verificado antes de publicarse.
 
