@@ -56,6 +56,10 @@ aprobados (≥70%), puedes reclamar un certificado con código único
 - **Certificado imprimible** en `/certificado/:pathId`.
 - **Verificación pública** en `/verificar/:code`: cualquiera puede
   comprobar que un código corresponde a un certificado real.
+- **Certificado de ejemplo** con código público `BK-DEMO`: la semilla lo
+  crea para el estudiante demo en «Fundamentos de Blockchain», así que
+  cualquiera puede probar la verificación en `/verificar/BK-DEMO` sin
+  cuenta y sin conocer a ningún estudiante.
 
 ### Tutor de lecciones — `/tutor`
 Un tutor dentro de la plataforma que responde preguntas del estudiante

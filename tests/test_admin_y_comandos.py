@@ -148,7 +148,7 @@ def _semilla_desde_cero(tmp_path, con_admin_demo):
             tabla: con.execute(
                 f"SELECT COUNT(*) FROM {tabla}").fetchone()[0]
             for tabla in ("learning_paths", "modules", "lessons",
-                          "quizzes", "user_progress")
+                          "quizzes", "user_progress", "certificates")
         }
     finally:
         con.close()
@@ -163,7 +163,7 @@ def test_semilla_desde_cero_sin_variable_solo_estudiante_demo(tmp_path):
     assert usuarios == {"student@academy.test": ("student", True)}
     assert conteos == {
         "learning_paths": 2, "modules": 5, "lessons": 9,
-        "quizzes": 9, "user_progress": 9,
+        "quizzes": 9, "user_progress": 9, "certificates": 1,
     }
 
 
@@ -177,5 +177,5 @@ def test_semilla_desde_cero_con_variable_ambos_demo(tmp_path):
     }
     assert conteos == {
         "learning_paths": 2, "modules": 5, "lessons": 9,
-        "quizzes": 9, "user_progress": 9,
+        "quizzes": 9, "user_progress": 9, "certificates": 1,
     }

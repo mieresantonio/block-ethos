@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 
 import click
 from api.models import (
@@ -10,6 +11,7 @@ from api.models import (
     Quiz,
     UserProgress,
     UserType,
+    Certificate,
 )
 
 """
@@ -17,6 +19,15 @@ In this file, you can add as many commands as you want using the @app.cli.comman
 Flask commands are usefull to run cronjobs or tasks outside of the API but sill in integration 
 with youy database, for example: Import the price of bitcoin every night as 12am
 """
+
+
+# Código público del certificado de ejemplo: cualquiera puede comprobarlo
+# en /verificar/BK-DEMO sin cuenta. Es un certificado de demostración del
+# estudiante demo, no de un usuario real (el proyecto no tiene usuarios
+# reales): su único fin es que quien evalúa la plataforma pruebe la
+# verificación en 10 segundos. El código cabe en Certificate.code
+# (String(30)) y la unicidad (usuario, ruta) lo protege de duplicados.
+DEMO_CERTIFICATE_CODE = "BK-DEMO"
 
 
 def setup_commands(app):
@@ -714,6 +725,8 @@ function retirar(uint256 cantidad) public {
         created_lessons = 0
         created_quizzes = 0
         created_progress = 0
+        created_certificates = 0
+        demo_cert_omitido = False
 
         try:
             user_by_email = {}
@@ -822,6 +835,45 @@ function retirar(uint256 cantidad) public {
                                 )
                                 created_progress += 1
 
+            # Certificado demo verificable sin cuenta (código BK-DEMO).
+            # El estudiante demo nunca completa la ruta por la vía normal
+            # (su progreso se siembra sin completar), así que el
+            # certificado se inserta directo: es una fila de ejemplo, no
+            # el resultado de haber cursado nada. Get-or-create como el
+            # resto de la semilla: si BK-DEMO ya existe, no se duplica.
+            # Si el estudiante demo ya tuviera un certificado para esta
+            # ruta con otro código, la restricción única
+            # uq_certificate_user_path impediría crear un segundo: en
+            # ese caso se deja el existente y se avisa al final.
+            if student is not None:
+                demo_path = db.session.execute(
+                    db.select(LearningPath).filter_by(
+                        title=paths[0]["title"])
+                ).scalar_one_or_none()
+                if demo_path is None:
+                    demo_cert_omitido = True
+                else:
+                    demo_cert = db.session.execute(
+                        db.select(Certificate).filter_by(
+                            code=DEMO_CERTIFICATE_CODE)
+                    ).scalar_one_or_none()
+                    if demo_cert is None:
+                        existente = db.session.execute(
+                            db.select(Certificate).filter_by(
+                                user_id=student.id,
+                                learning_path_id=demo_path.id)
+                        ).scalar_one_or_none()
+                        if existente is None:
+                            db.session.add(Certificate(
+                                user_id=student.id,
+                                learning_path_id=demo_path.id,
+                                code=DEMO_CERTIFICATE_CODE,
+                                issued_at=datetime.now(timezone.utc),
+                            ))
+                            created_certificates += 1
+                        else:
+                            demo_cert_omitido = True
+
             db.session.commit()
         except Exception:
             db.session.rollback()
@@ -831,9 +883,22 @@ function retirar(uint256 cantidad) public {
             "Seed completado: "
             f"{created_users} usuarios, {created_paths} rutas, "
             f"{created_modules} módulos, {created_lessons} lecciones, "
-            f"{created_quizzes} quizzes y {created_progress} progresos creados."
+            f"{created_quizzes} quizzes, {created_progress} progresos y "
+            f"{created_certificates} certificados creados."
         )
         print("Usuario demo: student@academy.test / Student123!")
+        if demo_cert_omitido:
+            print(
+                "Certificado demo BK-DEMO no creado: no se pudo crear "
+                "para el estudiante demo y la primera ruta (si ya tiene "
+                "un certificado para esa ruta con otro código, la "
+                "unicidad por usuario y ruta impide un segundo)."
+            )
+        else:
+            print(
+                "Certificado demo: verifica BK-DEMO en "
+                "/verificar/BK-DEMO sin cuenta."
+            )
         if seed_admin_demo:
             print("Administrador demo: admin@academy.test / Admin123!")
         else:

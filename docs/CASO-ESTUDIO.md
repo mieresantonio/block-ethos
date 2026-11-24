@@ -103,6 +103,9 @@ Al completar una ruta al 100% con todos los quizzes aprobados (≥ 70%), el
 estudiante reclama un certificado con código único `BK-XXXXX-XXXXX-XXXXX`.
 Cualquiera puede comprobarlo en `/verificar/:code`, sin cuenta. La unicidad
 del código se garantiza en la base de datos, no solo en la aplicación.
+La semilla crea además un certificado de ejemplo con código público
+`BK-DEMO` (estudiante demo, «Fundamentos de Blockchain»): quien evalúa la
+plataforma prueba la verificación en `/verificar/BK-DEMO` sin registrarse.
 
 ### Gamificación sobre el progreso real
 
@@ -220,7 +223,9 @@ usuarios, así que diez logins de cualquiera bloqueaban el login de todo el
 mundo. La corrección es `ProxyFix` con un solo proxy de confianza (`x_for=1`),
 con dos tests que demuestran el límite por cliente y que la cabecera
 `X-Forwarded-For` no se puede falsificar para esquivarlo. Estado: corregido
-en la publicación del 23 nov 2026, en la misma entrega que este documento.
+en la publicación del 23 nov 2026
+([c52f86b](https://github.com/mieresantonio/block-ethos/commit/c52f86b8a20cb8a50d03801f935199e3bb74fe9d)),
+en la misma entrega que este documento.
 El limitador en sí está cubierto por 9 tests en
 [`tests/test_rate_limit.py`](https://github.com/mieresantonio/block-ethos/blob/b136008/tests/test_rate_limit.py).
 

@@ -80,6 +80,11 @@ export const VerifyPage = () => {
                             certificado emitido por Block Ethos. Revisa que esté escrito completo,
                             con sus guiones.
                         </p>
+                        <p className="text-secondary mb-4">
+                            ¿Quieres probar la verificación? Comprueba el certificado de ejemplo
+                            con el código{" "}
+                            <Link to="/verificar/BK-DEMO" className="mono">BK-DEMO</Link>.
+                        </p>
                         <Link to="/" className="btn btn-primary rounded-pill px-4">
                             Conocer Block Ethos
                         </Link>
