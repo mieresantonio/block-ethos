@@ -25,10 +25,14 @@ def _completar(client, headers, user_id, lesson_id, quiz_score=None):
     assert r.status_code == 200, r.get_json()
 
 
-def _leccion_con_quiz(client):
-    """Primera lección que tiene quiz, o None si la semilla no tiene."""
+def _leccion_con_quiz(client, headers):
+    """Primera lección que tiene quiz, o None si la semilla no tiene.
+
+    Los quizzes exigen sesión (modo invitado): sin headers, el
+    endpoint responde 401 y el bucle no encontraría ninguna.
+    """
     for leccion in _lecciones(client):
-        r = client.get(f"/api/quizzes/{leccion['id']}")
+        r = client.get(f"/api/quizzes/{leccion['id']}", headers=headers)
         if r.status_code == 200:
             return leccion
     return None
@@ -80,10 +84,10 @@ def test_siguiente_paso_avanza_al_completar(client, nuevo_usuario):
 
 def test_quiz_pendiente_aparece_en_next_step(client, nuevo_usuario):
     import pytest
-    leccion = _leccion_con_quiz(client)
+    headers, user = nuevo_usuario()
+    leccion = _leccion_con_quiz(client, headers)
     if leccion is None:
         pytest.skip("la semilla no tiene ninguna lección con quiz")
-    headers, user = nuevo_usuario()
     # Lección completada SIN nota: el quiz queda pendiente de aprobar.
     _completar(client, headers, user["id"], leccion["id"])
     body = _preguntar(

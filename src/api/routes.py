@@ -455,7 +455,7 @@ def get_learning_path(path_id):
         "time_required": path.time_required,
         "level": path.level,
         "number_of_modules": len(path.modules),
-        "modules": [{"id": m.id, "title": m.title, "lessons": [{"id": l.id, "title": l.title} for l in m.lessons]} for m in path.modules]}), 200
+        "modules": [{"id": m.id, "title": m.title, "lessons": [{"id": l.id, "title": l.title, "is_sample": l.is_sample} for l in m.lessons]} for m in path.modules]}), 200
 
 
 @api.route('/learning-paths', methods=['POST'])
@@ -502,7 +502,7 @@ def get_modules():
         "title": m.title,
         "level": m.level,
         "learning_path_id": m.learning_path_id,
-        "lessons": [{"id": l.id, "title": l.title, "order_number": l.order_number} for l in m.lessons]} for m in modules]), 200
+        "lessons": [{"id": l.id, "title": l.title, "order_number": l.order_number, "is_sample": l.is_sample} for l in m.lessons]} for m in modules]), 200
 
 
 @api.route('/modules/<int:module_id>', methods=['GET'])
@@ -545,7 +545,33 @@ def create_module():
 @api.route('/lessons', methods=['GET'])
 def get_lessons():
     lessons = db.session.execute(db.select(Lesson)).scalars().all()
-    return jsonify([{"id": l.id, "title": l.title, "module_id": l.module_id, "order_number": l.order_number} for l in lessons]), 200
+    return jsonify([{"id": l.id, "title": l.title, "module_id": l.module_id, "order_number": l.order_number, "is_sample": l.is_sample} for l in lessons]), 200
+
+
+@api.route('/lessons/sample', methods=['GET'])
+def get_sample_lesson():
+    """La lección de muestra (modo invitado, F-BE2): pública, sin sesión.
+
+    La marca la pone la semilla (is_sample en Lesson); si ninguna
+    lección la tiene (semilla sin correr tras la migración), 404 en JSON.
+    Si algún día hay más de una muestra, se sirve la de menor id.
+    """
+    lesson = db.session.execute(
+        db.select(Lesson).filter_by(is_sample=True)
+        .order_by(Lesson.id)).scalars().first()
+    if not lesson:
+        return jsonify({"error": "No hay lección de muestra"}), 404
+    return jsonify({
+        "id": lesson.id,
+        "title": lesson.title,
+        "module_id": lesson.module_id,
+        "path_id": lesson.module.learning_path_id,
+        "path_title": lesson.module.learning_path.title,
+        "module_title": lesson.module.title,
+        "content": lesson.content,
+        "order_number": lesson.order_number,
+        "is_sample": True,
+        "module_lessons": [{"id": l.id, "order": l.order_number} for l in lesson.module.lessons]}), 200
 
 
 @api.route('/lessons/<int:lesson_id>', methods=['GET'])
@@ -553,12 +579,22 @@ def get_lesson(lesson_id):
     lesson = db.session.get(Lesson, lesson_id)
     if not lesson:
         return jsonify({"error": "Lesson not found"}), 404
+    # Modo invitado (F-BE2): la lección de muestra es pública; el resto
+    # exige sesión. El 404 va primero a propósito: la existencia de la
+    # lección ya es pública (los títulos están en el catálogo), así que
+    # no se filtra nada y el test de 404 sigue en verde para invitados.
+    # _usuario_opcional_del_token (el mismo ayudante del tutor) devuelve
+    # None sin token, con token caducado o con token inválido.
+    if not lesson.is_sample and _usuario_opcional_del_token() is None:
+        return jsonify({"error": "Inicia sesión para ver esta lección"}), 401
     return jsonify({
         "id": lesson.id,
         "title": lesson.title,
         "module_id": lesson.module_id,
+        "path_id": lesson.module.learning_path_id,
         "content": lesson.content,
         "order_number": lesson.order_number,
+        "is_sample": lesson.is_sample,
         "module_lessons": [{"id": l.id, "order": l.order_number} for l in lesson.module.lessons]}), 200
 
 
@@ -586,11 +622,14 @@ def create_lesson():
         return jsonify({"error": "El título es demasiado largo (máximo 200 caracteres)"}), 400
     if not db.session.get(Module, body["module_id"]):
         return jsonify({"error": "Module not found"}), 404
+    if "is_sample" in body and not isinstance(body["is_sample"], bool):
+        return jsonify({"error": "is_sample debe ser verdadero o falso"}), 400
     lesson = Lesson(
         title=body["title"],
         content=body["content"],
         module_id=body["module_id"],
-        order_number=body["order_number"]
+        order_number=body["order_number"],
+        is_sample=body.get("is_sample", False)
     )
     db.session.add(lesson)
     db.session.commit()
@@ -607,6 +646,11 @@ def get_quiz(lesson_id):
         db.select(Quiz).filter_by(lesson_id=lesson_id)).scalars().first()
     if not quiz:
         return jsonify({"error": "Quiz not found"}), 404
+    # Modo invitado (F-BE2): ningún quiz es público, ni el de la lección
+    # de muestra: el quiz es la razón para registrarse. El 404 va
+    # primero, como en get_lesson, por la misma razón.
+    if _usuario_opcional_del_token() is None:
+        return jsonify({"error": "Inicia sesión para hacer este quiz"}), 401
     return jsonify({"id": quiz.id, "questions": quiz.questions_data}), 200
 
 

@@ -21,6 +21,11 @@ export const CTA = () => {
                     <Link to="/register" className="btn btn-primary btn-lg rounded-pill px-4">
                         Crear cuenta gratis <ArrowRight size={18} className="ms-1" />
                     </Link>
+                    <div className="mt-3">
+                        <Link to="/muestra" className="link-light link-offset-2 link-underline-opacity-50 link-underline-opacity-100-hover">
+                            O prueba una lección gratis, sin registrarte
+                        </Link>
+                    </div>
                 </div>
             </div>
         </section>

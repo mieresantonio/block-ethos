@@ -50,7 +50,14 @@ const ModuleCard = ({ path, data, order, userType, userProgress }) => {
                             : userType === "admin" ?
                                 <div className="col-auto"><Link to={`/lesson/${path}/${lesson.id}`}
                                     className="btn btn-outline-secondary btn-sm py-1 rounded-pill">
-                                    Ver Lección</Link></div> : ""}
+                                    Ver Lección</Link></div>
+                            : lesson.is_sample ?
+                                <div className="col-auto">
+                                    <Link to="/muestra"
+                                        className="btn btn-outline-primary btn-sm py-1 rounded-pill d-inline-flex align-items-center gap-1">
+                                        Probar gratis <ArrowRight size={13} />
+                                    </Link>
+                                </div> : ""}
                     </div>
                 </li>;
             })}
@@ -76,7 +83,7 @@ const ModuleCard = ({ path, data, order, userType, userProgress }) => {
 };
 
 // Formas según la API: `data` es un módulo de GET /api/learning-paths/<id>
-// (routes.py: {id, title, lessons: [{id, title}]}; Module.title es
+// (routes.py: {id, title, lessons: [{id, title, is_sample}]}; Module.title es
 // nullable=False en models.py) y `userProgress` es la lista de
 // GET /api/progress/<user_id> ({lesson_id, is_completed, ...}).
 // `userType` es el rol de User.serialize(): "student" | "admin", o null
@@ -89,7 +96,8 @@ ModuleCard.propTypes = {
         title: PropTypes.string.isRequired,
         lessons: PropTypes.arrayOf(PropTypes.shape({
             id: PropTypes.number.isRequired,
-            title: PropTypes.string.isRequired
+            title: PropTypes.string.isRequired,
+            is_sample: PropTypes.bool
         })).isRequired
     }).isRequired,
     order: PropTypes.number.isRequired,

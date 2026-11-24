@@ -90,6 +90,12 @@ class Lesson(db.Model):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     order_number: Mapped[int] = mapped_column(nullable=False)
+    # Modo invitado (F-BE2): la lección de muestra es pública sin sesión.
+    # False por defecto; la semilla marca la primera lección de
+    # «Fundamentos de Blockchain». Sin unicidad: si algún día hay una
+    # muestra por ruta, /api/lessons/sample toma la de menor id.
+    is_sample: Mapped[bool] = mapped_column(
+        Boolean(), default=False, nullable=False)
 
     module: Mapped["Module"] = relationship(back_populates="lessons")
     quiz: Mapped["Quiz"] = relationship(uselist=False, back_populates="lesson")

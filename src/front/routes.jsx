@@ -15,6 +15,7 @@ import { Courses } from "./pages/Courses";
 import { Admin } from "./pages/Admin";
 import CoursePage from "./pages/CoursePage";
 import LessonPage from "./pages/LessonPage";
+import SampleLessonPage from "./pages/SampleLessonPage";
 import { QuizPage } from "./pages/QuizPage";
 import { Lab } from "./pages/Lab";
 import { Tutor } from "./pages/Tutor";
@@ -60,6 +61,7 @@ export const router = createBrowserRouter(
       <Route path="/verificar/:code" element={<VerifyPage />} />
       <Route path="/admin" element={<Admin />} />
       <Route path="/course/:theId" element={<CoursePage />} />
+      <Route path="/muestra" element={<SampleLessonPage />} />
       <Route path="/lesson/:pathId/:lessonId" element={<LessonPage />} />
       <Route path="/quizzes/:lessonId" element={<QuizPage />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />

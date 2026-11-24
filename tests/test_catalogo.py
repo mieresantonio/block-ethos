@@ -35,15 +35,16 @@ def test_404_en_json(client):
         assert "error" in r.get_json(), url
 
 
-def test_modulos_lecciones_y_quiz(client):
+def test_modulos_lecciones_y_quiz(client, student_headers):
     modules = client.get("/api/modules").get_json()
     assert len(modules) >= 5
     lessons = client.get("/api/lessons").get_json()
     assert len(lessons) >= 9
-    primera = lessons[0]
-    detalle = client.get(f"/api/lessons/{primera['id']}").get_json()
-    assert detalle["content"]
-    assert detalle["module_lessons"]
-    quiz = client.get(f"/api/quizzes/{primera['id']}")
+    # La muestra se lee sin sesión; el quiz exige sesión (modo invitado).
+    muestra = client.get("/api/lessons/sample").get_json()
+    assert muestra["content"]
+    assert muestra["module_lessons"]
+    quiz = client.get(f"/api/quizzes/{muestra['id']}",
+                      headers=student_headers)
     assert quiz.status_code == 200
     assert len(quiz.get_json()["questions"]) == 4

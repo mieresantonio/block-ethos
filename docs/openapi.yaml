@@ -423,6 +423,9 @@ paths:
                   description: Módulo padre; debe existir.
                 order_number:
                   type: integer
+                is_sample:
+                  type: boolean
+                  description: Opcional. Marca la lección como muestra pública (modo invitado).
       responses:
         '201':
           description: Lección creada.
@@ -465,9 +468,59 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/lessons/sample:
+    get:
+      summary: Obtener la lección de muestra (modo invitado, pública sin sesión)
+      description: >-
+        Devuelve la lección marcada is_sample, con la misma forma que
+        el detalle de lección más los títulos de ruta y módulo. Si
+        ninguna lección está marcada (semilla sin correr tras la
+        migración), responde 404.
+      tags: [Catálogo]
+      responses:
+        '200':
+          description: Lección de muestra encontrada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  title:
+                    type: string
+                  module_id:
+                    type: integer
+                  path_id:
+                    type: integer
+                  path_title:
+                    type: string
+                  module_title:
+                    type: string
+                  content:
+                    type: string
+                  order_number:
+                    type: integer
+                  is_sample:
+                    type: boolean
+                  module_lessons:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        order:
+                          type: integer
+        '404':
+          description: Ninguna lección está marcada como muestra.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/lessons/{lesson_id}:
     get:
-      summary: Obtener una lección con su contenido y las lecciones del módulo
+      summary: Obtener una lección con su contenido y las lecciones del módulo (la muestra es pública; el resto exige sesión)
       tags: [Catálogo]
       responses:
         '200':
@@ -478,6 +531,12 @@ paths:
                 $ref: '#/components/schemas/LessonDetail'
         '404':
           description: No existe una lección con ese id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: La lección no es la muestra y no viene un JWT válido.
           content:
             application/json:
               schema:
@@ -1111,7 +1170,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /api/quizzes/{lesson_id}:
     get:
-      summary: Obtener el quiz de una lección
+      summary: Obtener el quiz de una lección (exige sesión)
       tags: [Catálogo]
       responses:
         '200':
@@ -1127,6 +1186,12 @@ paths:
                     description: Preguntas del quiz (JSON libre).
         '404':
           description: Esa lección no tiene quiz.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Falta un JWT válido (ningún quiz es público).
           content:
             application/json:
               schema:
@@ -1552,6 +1617,9 @@ components:
           type: integer
         order_number:
           type: integer
+        is_sample:
+          type: boolean
+          description: True solo en la lección de muestra (modo invitado).
     LessonDetail:
       type: object
       properties:
@@ -1561,10 +1629,15 @@ components:
           type: string
         module_id:
           type: integer
+        path_id:
+          type: integer
         content:
           type: string
         order_number:
           type: integer
+        is_sample:
+          type: boolean
+          description: True solo en la lección de muestra (modo invitado).
         module_lessons:
           type: array
           items:

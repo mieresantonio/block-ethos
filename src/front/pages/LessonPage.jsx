@@ -9,6 +9,7 @@ const LessonPage = () => {
     const params = useParams();
     const [lesson, setLesson] = useState();
     const [loadError, setLoadError] = useState("");
+    const [needsAuth, setNeedsAuth] = useState(false);
     const [userProgress, setUserProgress] = useState({});
     const [error, setError] = useState("");
     // Guarda de carrera por recurso (P1, ronda 14): mismo diseño que en
@@ -35,6 +36,14 @@ const LessonPage = () => {
                     'Content-Type': 'application/json'
                 }
             });
+
+            // Modo invitado (F-BE2): un 401 no es un fallo de conexión,
+            // es una lección cerrada para invitados.
+            if (response.status === 401) {
+                if (seq !== lessonSeq.current) return;
+                setNeedsAuth(true);
+                return;
+            }
 
             if (!response.ok) {
                 throw new Error("No se pudo obtener información");
@@ -148,6 +157,26 @@ const LessonPage = () => {
         getUserProgress();
     }, [params.lessonId]);
 
+    if (needsAuth) {
+        return (
+            <div className="container py-5">
+                <h3 className="fw-bold">Esta lección es para estudiantes registrados</h3>
+                <p className="text-secondary">
+                    Crea tu cuenta gratis para leer todas las lecciones y hacer
+                    los quizzes, con tu progreso guardado.
+                </p>
+                <div className="d-flex flex-wrap gap-2">
+                    <Link to="/register" className="btn btn-primary rounded-pill px-4">
+                        Crear cuenta gratis
+                    </Link>
+                    <Link to="/muestra" className="btn btn-outline-primary rounded-pill px-4">
+                        Probar la lección de muestra
+                    </Link>
+                </div>
+            </div>
+        );
+    }
+
     if (loadError) {
         return (
             <div className="container py-5">
@@ -175,6 +204,7 @@ const LessonPage = () => {
     }
 
     const hasQuiz = (lesson.module_lessons || []).length > 0;
+    const esMuestraInvitado = !currentUser && lesson?.is_sample;
 
     return <div className="container mt-4">
         {error && <div className="alert alert-danger py-2" role="alert">{error}</div>}
@@ -216,15 +246,19 @@ const LessonPage = () => {
             </Link> : <Link to={`/lesson/${params.pathId}/${previousLessonId()}`} className="btn btn-outline-secondary rounded-pill d-inline-flex align-items-center gap-2">
                 <ArrowLeft size={16} /> Anterior
             </Link>}
-            {nextLessonId() !== "quiz" ?
-                <Link to={`/lesson/${params.pathId}/${nextLessonId()}`} className="btn btn-primary rounded-pill px-4 d-inline-flex align-items-center gap-2">
-                    Siguiente <ArrowRight size={16} />
+            {esMuestraInvitado ?
+                <Link to="/register" className="btn btn-primary rounded-pill px-4 d-inline-flex align-items-center gap-2">
+                    Crear cuenta gratis para seguir <ArrowRight size={16} />
                 </Link>
-                : hasQuiz ? <Link to={`/quizzes/${params.lessonId}`} className="btn btn-primary rounded-pill px-4 d-inline-flex align-items-center gap-2">
-                    Ir al Quiz <ArrowRight size={16} />
-                </Link> : <Link to={`/course/${params.pathId}`} className="btn btn-primary rounded-pill px-4 d-inline-flex align-items-center gap-2">
-                    Volver al Curso <ArrowRight size={16} />
-                </Link>}
+                : nextLessonId() !== "quiz" ?
+                    <Link to={`/lesson/${params.pathId}/${nextLessonId()}`} className="btn btn-primary rounded-pill px-4 d-inline-flex align-items-center gap-2">
+                        Siguiente <ArrowRight size={16} />
+                    </Link>
+                    : hasQuiz ? <Link to={`/quizzes/${params.lessonId}`} className="btn btn-primary rounded-pill px-4 d-inline-flex align-items-center gap-2">
+                        Ir al Quiz <ArrowRight size={16} />
+                    </Link> : <Link to={`/course/${params.pathId}`} className="btn btn-primary rounded-pill px-4 d-inline-flex align-items-center gap-2">
+                        Volver al Curso <ArrowRight size={16} />
+                    </Link>}
         </div>
     </div>;
 

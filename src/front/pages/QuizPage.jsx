@@ -6,6 +6,7 @@ export const QuizPage = () => {
     const { lessonId } = useParams();
     const [quiz, setQuiz] = useState(null);
     const [quizError, setQuizError] = useState("");
+    const [needsAuth, setNeedsAuth] = useState(false);
     const [respuestas, setRespuestas] = useState({});
     const [enviado, setEnviado] = useState(false);
     const [error, setError] = useState("");
@@ -59,7 +60,11 @@ export const QuizPage = () => {
         // siempre: ahora se muestra el error con forma de reintentar.
         getQuizByLesson(lessonId)
             .then((data) => { if (seq === quizSeq.current) setQuiz(data); })
-            .catch(() => { if (seq === quizSeq.current) setQuizError("No se pudo cargar el quiz. Revisa tu conexión e inténtalo de nuevo."); });
+            .catch((err) => {
+                if (seq !== quizSeq.current) return;
+                if (err?.code === "NO_AUTH") { setNeedsAuth(true); return; }
+                setQuizError("No se pudo cargar el quiz. Revisa tu conexión e inténtalo de nuevo.");
+            });
     };
 
     useEffect(() => {
@@ -75,6 +80,26 @@ export const QuizPage = () => {
         });
         return correctas;
     };
+
+    if (needsAuth) {
+        return (
+            <div className="container py-5">
+                <h3 className="fw-bold">Este quiz es para estudiantes registrados</h3>
+                <p className="text-secondary">
+                    Crea tu cuenta gratis para hacer los quizzes y guardar
+                    tu progreso. Puedes probar antes la lección de muestra.
+                </p>
+                <div className="d-flex flex-wrap gap-2">
+                    <Link to="/register" className="btn btn-primary rounded-pill px-4">
+                        Crear cuenta gratis
+                    </Link>
+                    <Link to="/muestra" className="btn btn-outline-primary rounded-pill px-4">
+                        Probar la lección de muestra
+                    </Link>
+                </div>
+            </div>
+        );
+    }
 
     if (quizError) {
         return (

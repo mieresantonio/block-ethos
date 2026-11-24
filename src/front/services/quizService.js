@@ -32,6 +32,14 @@ export const getQuizByLesson = async (lessonId) => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL;
     try {
         const res = await fetch(backendUrl + "/api/quizzes/" + lessonId);
+        // Modo invitado (F-BE2): un 401/403 no es un fallo de red, es
+        // un quiz cerrado para invitados. No se tapa con MOCK_QUIZ:
+        // la página muestra la llamada a registrarse.
+        if (res.status === 401 || res.status === 403) {
+            const error = new Error("auth");
+            error.code = "NO_AUTH";
+            throw error;
+        }
         if (!res.ok) return MOCK_QUIZ;
         const data = await res.json();
         return {

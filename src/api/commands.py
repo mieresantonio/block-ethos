@@ -786,6 +786,14 @@ function retirar(uint256 cantidad) public {
                     for order_number, lesson_data in enumerate(
                         module_data["lessons"], start=1
                     ):
+                        # Modo invitado (F-BE2): la muestra es la primera
+                        # lección de «Fundamentos de Blockchain». El resto
+                        # queda en False explícito: si la muestra cambia
+                        # algún día, un re-seed apaga la anterior.
+                        es_muestra = (
+                            path_data["title"] == "Fundamentos de Blockchain"
+                            and lesson_data["title"] == "¿Qué es una blockchain?"
+                        )
                         lesson = db.session.execute(
                             db.select(Lesson).filter_by(
                                 title=lesson_data["title"], module_id=module.id
@@ -797,12 +805,14 @@ function retirar(uint256 cantidad) public {
                                 content=lesson_data["content"],
                                 order_number=order_number,
                                 module=module,
+                                is_sample=es_muestra,
                             )
                             db.session.add(lesson)
                             created_lessons += 1
                         else:
                             lesson.content = lesson_data["content"]
                             lesson.order_number = order_number
+                            lesson.is_sample = es_muestra
                         db.session.flush()
 
                         quiz = db.session.execute(
