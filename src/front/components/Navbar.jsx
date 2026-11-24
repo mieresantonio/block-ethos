@@ -105,18 +105,8 @@ export const Navbar = () => {
 					)}
 				</form>
 
-				{/* En pantallas grandes, los enlaces van junto al buscador. */}
+				{/* En pantallas grandes, entrar/registrarse arriba a la derecha. */}
 				<div className="d-none d-lg-flex align-items-center gap-2">
-					<Link to="/courses" className="btn btn-outline-primary rounded-pill">
-						Explorar Rutas
-					</Link>
-					<Link to="/laboratorio" className="btn btn-outline-primary rounded-pill">
-						Laboratorio
-					</Link>
-					<Link to="/tutor" className="btn btn-outline-primary rounded-pill">
-						Tutor
-					</Link>
-
 					{store.token ? (
 						<>
 							<Link to="/dashboard" className="btn btn-outline-primary rounded-pill">
@@ -136,6 +126,19 @@ export const Navbar = () => {
 							</Link>
 						</>
 					)}
+				</div>
+
+				{/* Los enlaces de contenido, centrados en su propia fila. */}
+				<div className="d-none d-lg-flex justify-content-center gap-2 w-100">
+					<Link to="/courses" className="btn btn-outline-primary rounded-pill">
+						Explorar Rutas
+					</Link>
+					<Link to="/laboratorio" className="btn btn-outline-primary rounded-pill">
+						Laboratorio
+					</Link>
+					<Link to="/tutor" className="btn btn-outline-primary rounded-pill">
+						Tutor
+					</Link>
 				</div>
 
 				{/* En móvil y tablet, los mismos enlaces en una fila
